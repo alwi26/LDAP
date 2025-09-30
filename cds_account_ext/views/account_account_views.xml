@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="cds_account_ext_view_account_form_inherit" model="ir.ui.view">
+        <field name="name">cds.account.ext.view.account.form.inherit</field>
+        <field name="model">account.account</field>
+        <field name="inherit_id" ref="account.view_account_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page name="properties" string="Properties">
+                    <group name="general_information_group" string="General Information">
+                        <field name="cds_searchable_code" string="Searchable Code"/>
+                        <field name="cds_level_1_parent" string="Parent Company" widget="many2many_tags"/>
+                    </group>
+                    <group>
+                        <group name="properties_left_group" string="Properties">
+                            <field name="cds_account_report_group_axis_1"/>
+                            <field name="cds_account_report_group_axis_2"/>
+                            <field name="cds_account_report_group_axis_3"/>
+                            <field name="cds_account_report_group_axis_4"/>
+                        </group>
+                        <group name="properties_right_group" string="Properties">
+                            <field name="cds_account_report_group_axis_5"/>
+                            <field name="cds_account_report_group_axis_6"/>
+                            <field name="cds_account_report_group_axis_7"/>
+                            <field name="cds_account_report_group_axis_8"/>
+                        </group>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,4 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_cds_pre_account_move_line,access.cds.pre.account.move.line,model_cds_pre_account_move_line,,1,1,1,1
+access_cds_mapping_analyitc_plan,access.cds_mapping.analyitc.plan,model_cds_mapping_analyitc_plan,,1,1,1,1
+access_wizard_recycle_journal,access_wizard_recycle_journal,model_wizard_recycle_journal,,1,1,1,1

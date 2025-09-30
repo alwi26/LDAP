@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="cds_account_ext_view_move_line_tree_inherit" model="ir.ui.view">
+        <field name="name">cds.account.ext.view.move.line.tree.inherit</field>
+        <field name="model">account.move.line</field>
+        <field name="inherit_id" ref="account.view_move_line_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='account_id']" position='after'>
+                <field name="cds_pre_account_id"/>
+                <field name="cds_searchable_code" string="Searchable Code"/>
+                <field name="cds_account_report_group_axis_1"/>
+                <field name="cds_account_report_group_axis_2"/>
+                <field name="cds_account_report_group_axis_3"/>
+                <field name="cds_account_report_group_axis_4"/>
+                <field name="cds_account_report_group_axis_5"/>
+                <field name="cds_account_report_group_axis_6"/>
+                <field name="cds_account_report_group_axis_7"/>
+                <field name="cds_account_report_group_axis_8"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

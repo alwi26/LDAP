@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+        <record id="cds_pre_account_move_line_list_view" model="ir.ui.view">
+            <field name="name">cds.pre.account.move.line.list.view</field>
+            <field name="model">cds_pre_account.move.line</field>
+            <field name="arch" type="xml">
+                <list string="Pre Journal Items" editable="bottom">
+                    <field name="cds_date"/>
+                    <field name="cds_run_description" optional="hide"/>
+                    <field name="cds_entity_name" optional="hide"/>
+                    <field name="cds_group_type" optional="hide"/>
+                    <field name="cds_distribution_channel" optional="hide"/>
+                    <field name="cds_product" optional="hide"/>
+                    <field name="cds_campaign_code" optional="hide"/>
+                    <field name="cds_branch_code" optional="hide"/>
+                    <field name="cds_cost_center" optional="hide"/>
+                    <field name="cds_ifrs_group" optional="hide"/>
+                    <field name="cds_account_code"/>
+                    <field name="cds_account_name" optional="hide"/>
+                    <field name="cds_balance_type"/>
+                    <field name="cds_debit"/>
+                    <field name="cds_credit"/>
+                    <field name="cds_amount_in_functional_currency"/>
+                    <field name="cds_amount_in_transaction_currency"/>
+                    <field name="cds_transaction_currency" optional="hide"/>
+                    <field name="cds_amount_in_currency_conversion" optional="hide"/>
+                    <field name="cds_insurance_contract_type_at_opening" optional="hide"/>
+                    <field name="cds_insurance_contract_type_at_closing" optional="hide"/>
+                    <field name="cds_portfolio" optional="hide"/>
+                    <field name="cds_valuation_method_of_master_account" optional="hide"/>
+                    <field name="cds_component_of_master_account" optional="hide"/>
+                    <field name="cds_sub_component_of_master_account" optional="hide"/>
+                    <field name="cds_movement_of_master_account" optional="hide"/>
+                    <field name="cds_sub_movement1_of_master_account" optional="hide"/>
+                    <field name="cds_sub_movement2_of_master_account" optional="hide"/>
+                    <field name="cds_underlying_ifrs17_group" optional="hide"/>
+                    <field name="cds_valuation_method" optional="hide"/>
+                    <field name="cds_vfa_approach" optional="hide"/>
+                    <field name="cds_modified_gmm" optional="hide"/>
+                    <field name="cds_loss_recovery_component_method" optional="hide"/>
+                    <field name="cds_onerosity_at_soa" optional="hide"/>
+                    <field name="cds_onerosity_at_eoa" optional="hide"/>
+                    <field name="cds_onerosity_at_nb_recog" optional="hide"/>
+                    <field name="cds_at_opening" optional="hide"/>
+                    <field name="cds_lrecc_new_business_recognition" optional="hide"/>
+                    <field name="cds_reinsurance_held" optional="hide"/>
+                    <field name="cds_source_of_business" optional="hide"/>
+                    <field name="cds_transition_method" optional="hide"/>
+                    <field name="cds_accounting_policy" optional="hide"/>
+                    <field name="cds_calculation_step" optional="hide"/>
+                    <field name="cds_hierarchy_node" optional="hide"/>
+                    <field name="cds_journal_type" optional="hide"/>
+                    <field name="cds_variable" optional="hide"/>
+                    <field name="cds_variable_definition" optional="hide"/>
+                    <field name="cds_direct_rch_of_master_account" optional="hide"/>
+                    <field name="cds_lrc_lic_and_onerousness_of_master_account" optional="hide"/>
+                    <field name="cds_section_of_master_account" optional="hide"/>
+                    <field name="cds_generate_done" optional="hide"/>
+                    <field name="cds_category_column" optional="hide"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="cds_pre_account_move_line_action" model="ir.actions.act_window">
+            <field name="name">Pre Journal Items</field>
+            <field name="type">ir.actions.act_window</field>
+            <field name="res_model">cds_pre_account.move.line</field>
+            <field name="view_mode">list</field>
+            <field name="context">{}</field>
+            <field name="domain">[]</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    Create a new pre journal item
+                </p>
+            </field>
+        </record>
+
+        <menuitem id="cds_pre_account_move_line_menu"
+                  name="Pre Journal Items"
+                  action="cds_pre_account_move_line_action"
+                  parent="account.menu_finance_entries"
+                  sequence="15"/>
+    </data>
+</odoo>

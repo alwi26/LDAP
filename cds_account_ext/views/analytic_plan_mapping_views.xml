@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+        <record id="cds_mapping_analyitc_plan_list_view" model="ir.ui.view">
+            <field name="name">cds_mapping.analyitc.plan.list.view</field>
+            <field name="model">cds_mapping.analyitc.plan</field>
+            <field name="arch" type="xml">
+                <list string="Mapping Analytic Plan" editable="bottom">
+                    <field name="cds_column_name"/>
+                    <field name="cds_analytic_plan"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="cds_mapping_analyitc_plan_line_action" model="ir.actions.act_window">
+            <field name="name">Mapping Analytic Plan</field>
+            <field name="type">ir.actions.act_window</field>
+            <field name="res_model">cds_mapping.analyitc.plan</field>
+            <field name="view_mode">list</field>
+            <field name="context">{}</field>
+            <field name="domain">[]</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    Create a new analytic plan mapping
+                </p>
+            </field>
+        </record>
+
+        <menuitem id="cds_mapping_analyitc_plan_line_menu"
+                  name="Mapping Analytic Plan"
+                  action="cds_mapping_analyitc_plan_line_action"
+                  parent="account.menu_analytic_accounting"
+                  sequence="16"/>
+    </data>
+</odoo>

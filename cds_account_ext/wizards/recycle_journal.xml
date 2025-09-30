@@ -1,0 +1,32 @@
+<odoo>
+    <record id="view_wizard_recycle_journal" model="ir.ui.view">
+        <field name="name">wizard.recycle.journal.form</field>
+        <field name="model">wizard.recycle.journal</field>
+        <field name="arch" type="xml">
+            <form string="Recycle Journal Records">
+                <group>
+                    <field name="date_from"/>
+                    <field name="date_to"/>
+                </group>
+                <footer>
+                    <button string="Delete" type="object" name="action_delete" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record> 
+
+    <record id="action_wizard_recycle_journal" model="ir.actions.act_window">
+        <field name="name">Recycle Journal Records</field>
+        <field name="res_model">wizard.recycle.journal</field>
+        <field name="view_id" ref="view_wizard_recycle_journal"></field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem id="menu_delete_journal_root" 
+              name="Recycle Journal Data"
+              parent="accountant.menu_accounting"
+              action="action_wizard_recycle_journal"
+              sequence="9999"/>
+</odoo>

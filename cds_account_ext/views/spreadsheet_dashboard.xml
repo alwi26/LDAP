@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="spreadsheet_dashboard_inherit_view_list" model="ir.ui.view">
+        <field name="name">spreadsheet.dashboard.inherit.list.view</field>
+        <field name="model">spreadsheet.dashboard</field>
+        <field name="inherit_id" ref="spreadsheet_dashboard.spreadsheet_dashboard_view_list"/>
+        <field name="arch" type="xml">
+            <field name="spreadsheet_binary_data" position="after">
+                <field name="cds_json_converted"/>
+            </field>
+        </field>
+    </record>
+
+</odoo>

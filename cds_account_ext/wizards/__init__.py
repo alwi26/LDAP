@@ -1,0 +1,1 @@
+from . import recycle_journal
