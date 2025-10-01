@@ -219,196 +219,198 @@ class CdsPreAccountMoveLine(models.Model):
             last_year_dashboard_group.unlink()
 
     def _recycle_dashboard_json(self, moves):
-        dashboard_group = self.env["spreadsheet.dashboard.group"].search(
-            [("create_date", "<", fields.Date.today()), ("name", "ilike", "IFRS")],
-            order="create_date desc",
-            limit=1,
-        )
-
-        if not moves:
-            return
-
-        date = moves[0].date
-        month_year = date.strftime("%b %Y")
-        dashboard_name = f"IFRS ({month_year})"
-        start_month = date.replace(day=1)
-        end_month = (start_month + relativedelta(months=1))
-
-        existing_dashboard_group = self.env["spreadsheet.dashboard.group"].search(
-            [("name", "=", dashboard_name)], limit=1
-        )
-        if existing_dashboard_group:
-            raise UserError(_(f"Already has existing dashboard {dashboard_name}"))
-
-        if dashboard_group:
-            new_group = dashboard_group.copy(default={"name": dashboard_name})
-            for dashboard in dashboard_group.dashboard_ids:
-                dashboard.copy(
-                    default={
-                        "dashboard_group_id": new_group.id,
-                        "name": dashboard.name,
-                        "spreadsheet_binary_data": dashboard.spreadsheet_binary_data,
-                    }
-                )
-
-            # semua line_ids digabung
-            all_move_lines = moves.mapped("line_ids")
-
-            for new_dashboard in new_group.dashboard_ids:
-                binary_data = new_dashboard.spreadsheet_binary_data
-                if not binary_data:
-                    continue
-
-                decoded_bytes = base64.b64decode(binary_data)
-                json_data = json.loads(decoded_bytes.decode("utf-8"))
-
-                headers = json_data["lists"]["1"]["columns"]
-                sheets = json_data.get("sheets")[1]
-                cells = sheets.get("cells", {})
-
-                # Copy json untuk simpan text version
-                json_data_text = copy.deepcopy(json_data)
-                sheets_text = json_data_text.get("sheets")[1]
-                cells_text = sheets_text.get("cells", {})
-
-                # clear cell value
-                cells.clear()
-                cells_text.clear()
-
-                # rewrite the cells
-                for i, field in enumerate(headers):
-                    field_obj = self.env["account.move.line"]._fields.get(field)
-                    if not field_obj:
-                        continue
-
-                    field_label = field_obj.string
-                    letter = string.ascii_uppercase[i]
-                    no = 1
-
-                    # Keep Odoo format
-                    cells[f"{letter}{no}"] = {
-                        "content": f'=ODOO.LIST.HEADER(1,"{field}")'
-                    }
-                    cells_text[f"{letter}{no}"] = {"content": f"{field_label}"}
-
-                    for move_line in all_move_lines:
-                        no += 1
-                        cells[f"{letter}{no}"] = {
-                            "content": f'=ODOO.LIST(1,{no-1},"{field}")'
+        for move in moves:
+            dashboard_group = self.env["spreadsheet.dashboard.group"].search(
+                [("create_date", "<", fields.Date.today()), ("name", "ilike", "IFRS")],
+                order="create_date desc",
+                limit=1,
+            )
+    
+            if not moves:
+                return
+    
+            date = move.date
+            month_year = date.strftime("%b %Y")
+            dashboard_name = f"IFRS ({month_year})"
+            start_month = date.replace(day=1)
+            end_month = (start_month + relativedelta(months=1))
+    
+            existing_dashboard_group = self.env["spreadsheet.dashboard.group"].search(
+                [("name", "=", dashboard_name)], limit=1
+            )
+            if existing_dashboard_group:
+                raise UserError(_(f"Already has existing dashboard {dashboard_name}"))
+    
+            if dashboard_group:
+                new_group = dashboard_group.copy(default={"name": dashboard_name})
+                for dashboard in dashboard_group.dashboard_ids:
+                    dashboard.copy(
+                        default={
+                            "dashboard_group_id": new_group.id,
+                            "name": dashboard.name,
+                            "spreadsheet_binary_data": dashboard.spreadsheet_binary_data,
                         }
-
-                        value = getattr(move_line, field, "")
-                        if field_obj.type == "many2one":
-                            value = value.display_name if value else ""
-                        elif field_obj.type in ("one2many", "many2many"):
-                            value = ", ".join(value.mapped("display_name"))
-                        value = value or ""
-
-                        cells_text[f"{letter}{no}"] = {"content": f"{value}"}
-
-                
-                # Convert amount formula
-                cells1 = json_data_text.get("sheets")[0].get("cells")
-                sheet1_backup = copy.deepcopy(json_data_text.get("sheets")[0])
-
-                # Backup Data Formula to sheet 3
-                json_data_text.get("sheets").append(sheet1_backup)
-                json_data_text["sheets"][2].update(
-                    {"id": "backupsheetformula", "name": "Backup Sheet Formula"}
-                )
-
-                pattern = re.compile(
-                    r"""(?ix)           # ignore case, verbose
-                    ([+\-]?)\s*         # optional sign
-                    (?:                 # start big non-capture group
-                        sumifs\(
-                            [^!]+!([A-Z]+):[A-Z]+\s*,\s*
-                            [^!]+!([A-Z]+):[A-Z]+\s*,\s*
-                            ([A-Z]+\d+)
-                        \)
-                      |                # OR
-                        sum\(\s*
-                            ([A-Z]+\d+):([A-Z]+\d+)
-                        \)
-                    )"""
-                )
-
-                # calculate sumifs first
-                for cell_id, cell_data in cells1.items():
-                    content = cell_data.get("content", "")
-                    if isinstance(content, str) and "sumifs" in content.lower():
-                        matches = pattern.findall(content)
-                        sum_amount = 0
-                        if matches:
-                            for m in matches:
-                                (
-                                    sign,
-                                    sum_col,
-                                    crit_col,
-                                    crit_cell,
-                                    start_cell,
-                                    end_cell,
-                                ) = m
-                                sign = sign or "+"
-                                if sum_col:  # it’s a SUMIFS
-                                    crit_value = cells1.get(crit_cell, {}).get(
-                                        "content"
-                                    )
-                                    # Step 2: search in the other sheet’s crit_col column for the same content
-                                    found_cells = []
-                                    for other_key, other_data in cells_text.items():
-                                        if other_data.get("content") == crit_value:
-                                            found_cells.append(
-                                                "".join(filter(str.isdigit, other_key))
-                                            )
-                                    total_amount = 0
-                                    for key in found_cells:
-                                        amount = cells_text.get(sum_col + str(key)).get("content") or 0
-                                        total_amount += float(amount)
-                                    sum_amount += total_amount if sign == "+" else -total_amount
-
-                        cells1.get(cell_id).update({"content": abs(sum_amount)})
-
-                for cell_id, cell_data in cells1.items():
-                    content = cell_data.get("content", "")
-                    if isinstance(content, str) and "sum" in content.lower() and "sumifs" not in content.lower():
-                        def val(cid):
-                            v = str(cells1.get(cid, {}).get("content", "")).strip()
-                            return float(v) if v else 0
-                        total = 0
-                        for arg in content[5:-1].split(','):          # ambil isi SUM(...)
-                            arg = arg.strip()
-                            if ':' in arg:                            # jika range
-                                start, end = arg.split(':')
-                                col = ''.join(filter(str.isalpha, start))
-                                r1 = int(''.join(filter(str.isdigit, start)))
-                                r2 = int(''.join(filter(str.isdigit, end)))
-                                for r in range(r1, r2 + 1):
-                                    total += val(f"{col}{r}")
-                            else:                                     # jika cell tunggal
-                                total += val(arg)
-                        cells1.get(cell_id).update({"content": total})
-
-                last_col_letter = string.ascii_uppercase[len(headers) - 1]
-                last_row_number = len(all_move_lines) + 1
-                new_range = f"A1:{last_col_letter}{last_row_number}"
-
-                sheets.get("tables")[0].update({"range": new_range})
-                sheets_text.get("tables")[0].update({"range": new_range})
-
-                json_data.get("sheets")[1].update({"cells": cells})
-                json_data_text.get("sheets")[1].update({"cells": cells_text})
-
-                # update domain → semua moves
-                domain = json_data["lists"]["1"]["domain"]
-                domain = [("move_id", "in", moves.ids)]
-                json_data["lists"]["1"].update({"domain": domain})
-                json_data_text["lists"]["1"].update({"domain": domain})
-
-                # encode back to base64
-                updated_json_str = json.dumps(json_data)
-                updated_binary = base64.b64encode(updated_json_str.encode("utf-8"))
-
-                new_dashboard.spreadsheet_binary_data = updated_binary
-                new_dashboard.cds_json_converted = str(json_data_text)
-        self._unlink_dashboard_last_year(date)
+                    )
+    
+                # semua line_ids digabung
+                all_move_lines = moves.mapped("line_ids")
+    
+                for new_dashboard in new_group.dashboard_ids:
+                    binary_data = new_dashboard.spreadsheet_binary_data
+                    if not binary_data:
+                        continue
+    
+                    decoded_bytes = base64.b64decode(binary_data)
+                    json_data = json.loads(decoded_bytes.decode("utf-8"))
+    
+                    headers = json_data["lists"]["1"]["columns"]
+                    sheets = json_data.get("sheets")[1]
+                    cells = sheets.get("cells", {})
+    
+                    # Copy json untuk simpan text version
+                    json_data_text = copy.deepcopy(json_data)
+                    sheets_text = json_data_text.get("sheets")[1]
+                    cells_text = sheets_text.get("cells", {})
+    
+                    # clear cell value
+                    cells.clear()
+                    cells_text.clear()
+    
+                    # rewrite the cells
+                    for i, field in enumerate(headers):
+                        field_obj = self.env["account.move.line"]._fields.get(field)
+                        if not field_obj:
+                            continue
+    
+                        field_label = field_obj.string
+                        letter = string.ascii_uppercase[i]
+                        no = 1
+    
+                        # Keep Odoo format
+                        cells[f"{letter}{no}"] = {
+                            "content": f'=ODOO.LIST.HEADER(1,"{field}")'
+                        }
+                        cells_text[f"{letter}{no}"] = {"content": f"{field_label}"}
+    
+                        for move_line in all_move_lines:
+                            no += 1
+                            cells[f"{letter}{no}"] = {
+                                "content": f'=ODOO.LIST(1,{no-1},"{field}")'
+                            }
+    
+                            value = getattr(move_line, field, "")
+                            if field_obj.type == "many2one":
+                                value = value.display_name if value else ""
+                            elif field_obj.type in ("one2many", "many2many"):
+                                value = ", ".join(value.mapped("display_name"))
+                            value = value or ""
+    
+                            cells_text[f"{letter}{no}"] = {"content": f"{value}"}
+    
+                    
+                    # Convert amount formula
+                    cells1 = json_data_text.get("sheets")[0].get("cells")
+                    sheet1_backup = copy.deepcopy(json_data_text.get("sheets")[0])
+    
+                    # Backup Data Formula to sheet 3
+                    json_data_text.get("sheets").append(sheet1_backup)
+                    json_data_text["sheets"][2].update(
+                        {"id": "backupsheetformula", "name": "Backup Sheet Formula"}
+                    )
+    
+                    pattern = re.compile(
+                        r"""(?ix)           # ignore case, verbose
+                        ([+\-]?)\s*         # optional sign
+                        (?:                 # start big non-capture group
+                            sumifs\(
+                                [^!]+!([A-Z]+):[A-Z]+\s*,\s*
+                                [^!]+!([A-Z]+):[A-Z]+\s*,\s*
+                                ([A-Z]+\d+)
+                            \)
+                          |                # OR
+                            sum\(\s*
+                                ([A-Z]+\d+):([A-Z]+\d+)
+                            \)
+                        )"""
+                    )
+    
+                    # calculate sumifs first
+                    for cell_id, cell_data in cells1.items():
+                        content = cell_data.get("content", "")
+                        if isinstance(content, str) and "sumifs" in content.lower():
+                            matches = pattern.findall(content)
+                            sum_amount = 0
+                            if matches:
+                                for m in matches:
+                                    (
+                                        sign,
+                                        sum_col,
+                                        crit_col,
+                                        crit_cell,
+                                        start_cell,
+                                        end_cell,
+                                    ) = m
+                                    sign = sign or "+"
+                                    if sum_col:  # it’s a SUMIFS
+                                        crit_value = cells1.get(crit_cell, {}).get(
+                                            "content"
+                                        )
+                                        # Step 2: search in the other sheet’s crit_col column for the same content
+                                        found_cells = []
+                                        for other_key, other_data in cells_text.items():
+                                            if other_data.get("content") == crit_value:
+                                                found_cells.append(
+                                                    "".join(filter(str.isdigit, other_key))
+                                                )
+                                        total_amount = 0
+                                        for key in found_cells:
+                                            amount = cells_text.get(sum_col + str(key)).get("content") or 0
+                                            total_amount += float(amount)
+                                        sum_amount += total_amount if sign == "+" else -total_amount
+    
+                            cells1.get(cell_id).update({"content": abs(sum_amount)})
+    
+                    for cell_id, cell_data in cells1.items():
+                        content = cell_data.get("content", "")
+                        if isinstance(content, str) and "sum" in content.lower() and "sumifs" not in content.lower():
+                            def val(cid):
+                                v = str(cells1.get(cid, {}).get("content", "")).strip()
+                                return float(v) if v else 0
+                            total = 0
+                            for arg in content[5:-1].split(','):          # ambil isi SUM(...)
+                                arg = arg.strip()
+                                if ':' in arg:                            # jika range
+                                    start, end = arg.split(':')
+                                    col = ''.join(filter(str.isalpha, start))
+                                    r1 = int(''.join(filter(str.isdigit, start)))
+                                    r2 = int(''.join(filter(str.isdigit, end)))
+                                    for r in range(r1, r2 + 1):
+                                        total += val(f"{col}{r}")
+                                else:                                     # jika cell tunggal
+                                    total += val(arg)
+                            cells1.get(cell_id).update({"content": total})
+    
+                    last_col_letter = string.ascii_uppercase[len(headers) - 1]
+                    last_row_number = len(all_move_lines) + 1
+                    new_range = f"A1:{last_col_letter}{last_row_number}"
+    
+                    sheets.get("tables")[0].update({"range": new_range})
+                    sheets_text.get("tables")[0].update({"range": new_range})
+    
+                    json_data.get("sheets")[1].update({"cells": cells})
+                    json_data_text.get("sheets")[1].update({"cells": cells_text})
+    
+                    # update domain → semua moves
+                    domain = json_data["lists"]["1"]["domain"]
+                    domain = [("move_id", "in", moves.ids)]
+                    json_data["lists"]["1"].update({"domain": domain})
+                    json_data_text["lists"]["1"].update({"domain": domain})
+    
+                    # encode back to base64
+                    updated_json_str = json.dumps(json_data)
+                    updated_binary = base64.b64encode(updated_json_str.encode("utf-8"))
+    
+                    new_dashboard.spreadsheet_binary_data = updated_binary
+                    new_dashboard.cds_json_converted = str(json_data_text)
+                    new_dashboard.cds_dashboard_date = date
+            self._unlink_dashboard_last_year(date)

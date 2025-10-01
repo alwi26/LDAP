@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Accounting Extension",
-    "version": "18.0.0.0.0",
+    "version": "18.0.0.0.1",
     "license": "OPL-1",
     "summary": "Accounting Extension",
     "category": "Accounting",
@@ -21,6 +21,11 @@
         "views/spreadsheet_dashboard.xml",
         "wizards/recycle_journal.xml",
     ],
+    "assets": {
+        "spreadsheet.o_spreadsheet": [
+            "cds_account_ext/static/src/bundle/**/*.xml",
+        ],
+    },
     "installable": True,
     "application": False,
     "auto_install": False,

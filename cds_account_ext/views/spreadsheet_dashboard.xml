@@ -7,9 +7,34 @@
         <field name="inherit_id" ref="spreadsheet_dashboard.spreadsheet_dashboard_view_list"/>
         <field name="arch" type="xml">
             <field name="spreadsheet_binary_data" position="after">
-                <field name="cds_json_converted"/>
+                <field name="cds_dashboard_date"/>
+                <field name="cds_json_converted" optional="hide"/>
+                <button name="action_open_dashboard" type="object" string="Open Dashboard" class="btn-primary"/>
             </field>
         </field>
+    </record>
+
+    <record id="spreadsheet_dashboard_list_action_window" model="ir.actions.act_window">
+        <field name="name">IFRS</field>
+        <field name="type">ir.actions.act_window</field>
+        <field name="res_model">spreadsheet.dashboard</field>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="spreadsheet_dashboard.spreadsheet_dashboard_view_list"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create a new IFRS
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="cds_ifrs_menu"
+          name="IFRS"
+          action="spreadsheet_dashboard_list_action_window"
+          parent="spreadsheet_dashboard.spreadsheet_dashboard_menu_root"
+          sequence="99999"/>
+
+     <record id="spreadsheet_dashboard_menu_dashboard" model="ir.ui.menu">
+        <field name="active" eval="False"/>
     </record>
 
 </odoo>

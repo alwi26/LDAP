@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    <t t-name="spreadsheet_dashboard.DashboardAction.Expanded.inherit" t-inherit="spreadsheet_dashboard.DashboardAction.Expanded" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('o_spreadsheet_dashboard_search_panel')]" position="replace" >
+        </xpath>
+    </t>
+</templates>
