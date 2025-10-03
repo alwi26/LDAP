@@ -8,9 +8,91 @@
         <field name="arch" type="xml">
             <field name="spreadsheet_binary_data" position="after">
                 <field name="cds_dashboard_date"/>
-                <field name="cds_json_converted" optional="hide"/>
+                <field name="cds_dashboard_date_end"/>
+                <field name="cds_json_converted"/>
                 <button name="action_open_dashboard" type="object" string="Open Dashboard" class="btn-primary"/>
             </field>
+        </field>
+    </record>
+
+    <record id="spreadsheet_dashboard_inherit_view_list_editable" model="ir.ui.view">
+        <field name="name">spreadsheet.dashboard.inherit.list.view</field>
+        <field name="model">spreadsheet.dashboard</field>
+        <field name="inherit_id" ref="spreadsheet_dashboard.spreadsheet_dashboard_view_list"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="attributes">
+                <attribute name="editable"></attribute>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="spreadsheet_dashboard_inherit_view_form" model="ir.ui.view">
+        <field name="name">spreadsheet.dashboard.inherit.form.view</field>
+        <field name="model">spreadsheet.dashboard</field>
+        <field name="inherit_id" ref="spreadsheet_dashboard.spreadsheet_dashboard_view_form"/>
+        <field name="arch" type="xml">
+            <!-- <field name="group_ids" position="after"> -->
+            <xpath expr="//group" position="replace">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="dashboard_group_id"/>
+                            <field name="spreadsheet_binary_data" groups="base.group_no_one" widget="binary_spreadsheet" filename="spreadsheet_file_name" string="Data"/>
+                            <field name="spreadsheet_file_name" invisible="1"/>
+                            <field name="thumbnail"/>
+                            <field name="group_ids" widget="many2many_tags"/>
+                        </group>
+                    </group>
+                    <group string="Matching">
+                        <group>
+                            <field name="cds_dashboard_date"/>
+                            <field name="cds_dashboard_date_end"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group>
+                            <field name="join3_matching_field_id"/>
+                            <field name="join4_matching_field_id"/>
+                            <field name="join5_matching_field_id"/>
+                            <field name="join6_matching_field_id"/>
+                            <field name="join7_matching_field_id"/>
+                        </group>
+                        <group>
+                            <field name="join8_matching_field_id"/>
+                            <field name="join9_matching_field_id"/>
+                            <field name="join10_matching_field_id"/>
+                            <field name="join11_matching_field_id"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Formula">
+                            <button name="generate_all_balance" type="object" string="Calculate" class="btn-primary"/>
+                            <field name="cds_sdic_ids">
+                                <list editable="top">
+                                    <button name="generate_balance" type="object" string="Calculate" class="btn-primary"/>
+                                    <field name="name"/>
+                                    <field name="negative_bool"/>
+                                    <field name="account_code"/>
+                                    <field name="reportline"/>
+                                    <field name="column"/>
+                                    <field name="balance" sum="Total"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                    <field name="join3"/>
+                                    <field name="join4"/>
+                                    <field name="join5"/>
+                                    <field name="join6"/>
+                                    <field name="join7"/>
+                                    <field name="join8"/>
+                                    <field name="join9"/>
+                                    <field name="join10"/>
+                                    <field name="join11"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </xpath>
         </field>
     </record>
 
@@ -18,7 +100,7 @@
         <field name="name">IFRS</field>
         <field name="type">ir.actions.act_window</field>
         <field name="res_model">spreadsheet.dashboard</field>
-        <field name="view_mode">list</field>
+        <field name="view_mode">list,form</field>
         <field name="view_id" ref="spreadsheet_dashboard.spreadsheet_dashboard_view_list"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
@@ -31,10 +113,73 @@
           name="IFRS"
           action="spreadsheet_dashboard_list_action_window"
           parent="spreadsheet_dashboard.spreadsheet_dashboard_menu_root"
-          sequence="99999"/>
+          sequence="90"/>
 
-     <record id="spreadsheet_dashboard_menu_dashboard" model="ir.ui.menu">
-        <field name="active" eval="False"/>
+    <!-- Action -->
+    <record id="action_spreadsheet_dashboard_ifrs_calculator" model="ir.actions.act_window">
+        <field name="name">IFRS Calculator</field>
+        <field name="res_model">spreadsheet.dashboard.ifrs.calculator</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first IFRS Calculator record
+            </p>
+        </field>
     </record>
 
+    <!-- Menu -->
+    <menuitem id="cds_ifrs_calculator_menu"
+          name="IFRS Calculator"
+          action="action_spreadsheet_dashboard_ifrs_calculator"
+          parent="spreadsheet_dashboard.spreadsheet_dashboard_menu_root"
+          sequence="99"/>
+
+   <!-- Tree (List) View -->
+    <record id="view_spreadsheet_dashboard_ifrs_calculator_tree" model="ir.ui.view">
+        <field name="name">spreadsheet.dashboard.ifrs.calculator.tree</field>
+        <field name="model">spreadsheet.dashboard.ifrs.calculator</field>
+        <field name="arch" type="xml">
+            <list string="IFRS Calculator">
+                <field name="name"/>
+                <field name="column" optional="show"/>
+                <field name="reportline" optional="show"/>
+                <field name="balance" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_spreadsheet_dashboard_ifrs_calculator_form" model="ir.ui.view">
+        <field name="name">spreadsheet.dashboard.ifrs.calculator.form</field>
+        <field name="model">spreadsheet.dashboard.ifrs.calculator</field>
+        <field name="arch" type="xml">
+            <form string="IFRS Calculator">
+                <sheet>
+                    <group>
+                        <field name="spreadsheet_dashboard_id"/>
+                        <field name="name" readonly="1"/>
+                        <field name="account_code"/>
+                        <field name="currency_id"/>
+                        <field name="balance"/>
+                        <field name="negative_bool"/>
+                    </group>
+                    <group string="Joins">
+                        <field name="join3"/>
+                        <field name="join4"/>
+                        <field name="join5"/>
+                        <field name="join6"/>
+                        <field name="join7"/>
+                        <field name="join8"/>
+                        <field name="join9"/>
+                        <field name="join10"/>
+                        <field name="join11"/>
+                    </group>
+                    <group string="Report">
+                        <field name="reportline"/>
+                        <field name="column"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
 </odoo>

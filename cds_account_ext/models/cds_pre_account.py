@@ -6,7 +6,11 @@ import json
 import base64
 import copy
 from dateutil.relativedelta import relativedelta
-import re
+import calendar
+import io
+from datetime import datetime, timedelta, date
+from openpyxl import Workbook
+from xlcalculator import ModelCompiler, Evaluator, xltypes
 
 _logger = logging.getLogger(__name__)
 
@@ -62,13 +66,17 @@ class CdsPreAccountMoveLine(models.Model):
     cds_calculation_step = fields.Char(string="Calculation Step")
     cds_hierarchy_node = fields.Char(string="Hierarchy Node")
     cds_journal_type = fields.Char(string="Journal Type")
-    cds_loss_recovery_component_method = fields.Char(string="Loss Recovery Component Method")
+    cds_loss_recovery_component_method = fields.Char(
+        string="Loss Recovery Component Method"
+    )
     cds_modified_gmm = fields.Char(string="Modified GMM")
     cds_onerosity_at_soa = fields.Char(string="Onerosity at SOA")
     cds_onerosity_at_eoa = fields.Char(string="Onerosity at EOA")
     cds_onerosity_at_nb_recog = fields.Char(string="Onerosity at NB Recog")
     cds_at_opening = fields.Char(string="Onerosity at Opening")
-    cds_lrecc_new_business_recognition = fields.Char(string="LRECC New Business Recognition")
+    cds_lrecc_new_business_recognition = fields.Char(
+        string="LRECC New Business Recognition"
+    )
     cds_reinsurance_held = fields.Char(string="Reinsurance Held")
     cds_source_of_business = fields.Char(string="Source of Business")
     cds_transition_method = fields.Char(string="Transition Method")
@@ -78,13 +86,23 @@ class CdsPreAccountMoveLine(models.Model):
     cds_variable = fields.Char(string="Variable")
     cds_variable_definition = fields.Char(string="Variable Definition")
     cds_component_of_master_account = fields.Char(string="Component of Master Account")
-    cds_direct_rch_of_master_account = fields.Char(string="Direct / RCH of Master Account")
-    cds_lrc_lic_and_onerousness_of_master_account = fields.Char(string="LRC/LIC and Onerousness of Master Account")
+    cds_direct_rch_of_master_account = fields.Char(
+        string="Direct / RCH of Master Account"
+    )
+    cds_lrc_lic_and_onerousness_of_master_account = fields.Char(
+        string="LRC/LIC and Onerousness of Master Account"
+    )
     cds_movement_of_master_account = fields.Char(string="Movement of Master Account")
     cds_section_of_master_account = fields.Char(string="Section of Master Account")
-    cds_sub_component_of_master_account = fields.Char(string="Sub-Component of Master Account")
-    cds_sub_movement1_of_master_account = fields.Char(string="Sub-Movement 1 of Master Account")
-    cds_sub_movement2_of_master_account = fields.Char(string="Sub-Movement 2 of Master Account")
+    cds_sub_component_of_master_account = fields.Char(
+        string="Sub-Component of Master Account"
+    )
+    cds_sub_movement1_of_master_account = fields.Char(
+        string="Sub-Movement 1 of Master Account"
+    )
+    cds_sub_movement2_of_master_account = fields.Char(
+        string="Sub-Movement 2 of Master Account"
+    )
     cds_category_column = fields.Char("Category Column")
     cds_generate_done = fields.Boolean()
     pre_journal_items_bkey = fields.Integer(string="Data Warehouse IFRS ID")
@@ -113,7 +131,11 @@ class CdsPreAccountMoveLine(models.Model):
             date_str = rec.cds_date.strftime("%y%m%d") if rec.cds_date else ""
             rec.display_name = f"Pre-{date_str}"
 
-    @api.depends("cds_amount_in_currency_conversion", "cds_balance_type", "cds_amount_in_transaction_currency")
+    @api.depends(
+        "cds_amount_in_currency_conversion",
+        "cds_balance_type",
+        "cds_amount_in_transaction_currency",
+    )
     def _compute_debit_credit(self):
         for rec in self:
             rec.cds_debit = (
@@ -201,216 +223,159 @@ class CdsPreAccountMoveLine(models.Model):
             move.write({"line_ids": move_lines_vals})
             created_moves |= move
 
-        if created_moves:
-            self._recycle_dashboard_json(created_moves)
-
         return True
 
-    def _unlink_dashboard_last_year(self, date):
-        last_year_date = date.replace(year=date.year - 1)
-        # format it for last year
-        month_year = last_year_date.strftime("%b %Y")
-        dashboard_name = f"IFRS ({month_year})"
-        last_year_dashboard_group = self.env["spreadsheet.dashboard.group"].search(
-            [("name", "=", dashboard_name)], limit=1
-        )
-        if last_year_dashboard_group:
-            last_year_dashboard_group.dashboard_ids.unlink()
-            last_year_dashboard_group.unlink()
+    def _shift_year_safe(self, d, years_back=1):
+        """Geser tahun ke belakang, fallback ke last day of month jika tanggal tidak ada (contoh 29 Feb)."""
+        try:
+            return d.replace(year=d.year - years_back)
+        except ValueError:
+            last_day = calendar.monthrange(d.year - years_back, d.month)[1]
+            return date(d.year - years_back, d.month, last_day)
 
-    def _recycle_dashboard_json(self, moves):
-        for move in moves:
-            dashboard_group = self.env["spreadsheet.dashboard.group"].search(
-                [("create_date", "<", fields.Date.today()), ("name", "ilike", "IFRS")],
-                order="create_date desc",
-                limit=1,
+    def _unlink_dashboard_last_year(self, dashboard_ids):
+        dashboard_group = self.env["spreadsheet.dashboard.group"]
+        for dashboard in dashboard_ids:
+            last_year_date_start = self._shift_year_safe(dashboard.cds_dashboard_date)
+            last_year_date_end = self._shift_year_safe(dashboard.cds_dashboard_date_end)
+
+            # pakai range overlap, bukan strict equality
+            last_year_dashboard = self.env["spreadsheet.dashboard"].search([
+                ("cds_dashboard_date", "<=", last_year_date_end),
+                ("cds_dashboard_date_end", ">=", last_year_date_start),
+            ], limit=1)
+
+            dashboard_group |= last_year_dashboard.dashboard_group_id
+
+            if last_year_dashboard:
+                last_year_dashboard.cds_sdic_ids.unlink()
+                last_year_dashboard.unlink()
+        dashboard_group.unlink()
+
+    def next_date_range(self, start_date, end_date):
+        # 1. Tahun penuh
+        if (start_date.month, start_date.day) == (1, 1) and (end_date.month, end_date.day) == (12, 31):
+            return (start_date.replace(year=start_date.year + 1),
+                    end_date.replace(year=end_date.year + 1))
+
+        # 2. Cek apakah periode terdiri dari bulan penuh
+        last_day = calendar.monthrange(end_date.year, end_date.month)[1]
+        if start_date.day == 1 and end_date.day == last_day:
+            # berapa bulan span
+            months_span = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
+            start_next = start_date + relativedelta(months=months_span)
+            # end = last day bulan end_next
+            end_next = start_next + relativedelta(months=months_span) - relativedelta(days=1)
+            last_day_new = calendar.monthrange(end_next.year, end_next.month)[1]
+            end_next = end_next.replace(day=last_day_new)
+            return start_next, end_next
+
+        # 3. Fallback: geser berdasarkan jumlah hari
+        days = (end_date - start_date).days + 1
+        start_next = end_date + timedelta(days=1)
+        end_next = start_next + timedelta(days=days - 1)
+        return start_next, end_next
+
+    def get_header(self, cells):
+        headers = []
+        for cell, data in cells.items():
+            formula = data.get("content", "")
+            if formula.startswith("=ODOO.LIST.HEADER"):
+                # ambil argumen terakhir di dalam tanda kurung
+                arg = (
+                    formula.split(",")[-1].replace(")", "").replace('"', "").strip()
+                )
+                headers.append(arg)
+        return headers
+
+    def _recycle_dashboard_json(self):
+        dashboard_group = self.env["spreadsheet.dashboard.group"].search(
+            [("create_date", "<", fields.Date.today()), ("name", "ilike", "IFRS")],
+            order="create_date desc",
+            limit=1,
+        )
+
+        if not dashboard_group:
+            return
+
+        dashboard = dashboard_group.dashboard_ids and dashboard_group.dashboard_ids[0]
+        start, end = self.next_date_range(dashboard.cds_dashboard_date, dashboard.cds_dashboard_date_end)
+
+        s_str = start.strftime("%#d %B %Y")
+        e_str = end.strftime("%#d %B %Y")
+        dashboard_name = f"IFRS ({s_str} - {e_str})"
+        # existing_dashboard_group = self.env["spreadsheet.dashboard.group"].search(
+        #     [("name", "=", dashboard_name)], limit=1
+        # )
+        if end > fields.Date.today():
+            raise UserError(_(f"Cannot Generate Dashboard in date range {s_str} - {e_str}"))
+
+        new_group = dashboard_group.copy(default={"name": dashboard_name})
+        for dashboard in dashboard_group.dashboard_ids:
+            dashboard.copy(
+                default={
+                    "dashboard_group_id": new_group.id,
+                    "name": dashboard.name,
+                    "spreadsheet_binary_data": dashboard.spreadsheet_binary_data,
+                }
             )
-    
-            if not moves:
-                return
-    
-            date = move.date
-            month_year = date.strftime("%b %Y")
-            dashboard_name = f"IFRS ({month_year})"
-            start_month = date.replace(day=1)
-            end_month = (start_month + relativedelta(months=1))
-    
-            existing_dashboard_group = self.env["spreadsheet.dashboard.group"].search(
-                [("name", "=", dashboard_name)], limit=1
-            )
-            if existing_dashboard_group:
-                raise UserError(_(f"Already has existing dashboard {dashboard_name}"))
-    
-            if dashboard_group:
-                new_group = dashboard_group.copy(default={"name": dashboard_name})
-                for dashboard in dashboard_group.dashboard_ids:
-                    dashboard.copy(
-                        default={
-                            "dashboard_group_id": new_group.id,
-                            "name": dashboard.name,
-                            "spreadsheet_binary_data": dashboard.spreadsheet_binary_data,
-                        }
-                    )
-    
-                # semua line_ids digabung
-                all_move_lines = moves.mapped("line_ids")
-    
-                for new_dashboard in new_group.dashboard_ids:
-                    binary_data = new_dashboard.spreadsheet_binary_data
-                    if not binary_data:
-                        continue
-    
-                    decoded_bytes = base64.b64decode(binary_data)
-                    json_data = json.loads(decoded_bytes.decode("utf-8"))
-    
-                    headers = json_data["lists"]["1"]["columns"]
-                    sheets = json_data.get("sheets")[1]
-                    cells = sheets.get("cells", {})
-    
-                    # Copy json untuk simpan text version
-                    json_data_text = copy.deepcopy(json_data)
-                    sheets_text = json_data_text.get("sheets")[1]
-                    cells_text = sheets_text.get("cells", {})
-    
-                    # clear cell value
-                    cells.clear()
-                    cells_text.clear()
-    
-                    # rewrite the cells
-                    for i, field in enumerate(headers):
-                        field_obj = self.env["account.move.line"]._fields.get(field)
-                        if not field_obj:
-                            continue
-    
-                        field_label = field_obj.string
-                        letter = string.ascii_uppercase[i]
-                        no = 1
-    
-                        # Keep Odoo format
-                        cells[f"{letter}{no}"] = {
-                            "content": f'=ODOO.LIST.HEADER(1,"{field}")'
-                        }
-                        cells_text[f"{letter}{no}"] = {"content": f"{field_label}"}
-    
-                        for move_line in all_move_lines:
-                            no += 1
-                            cells[f"{letter}{no}"] = {
-                                "content": f'=ODOO.LIST(1,{no-1},"{field}")'
-                            }
-    
-                            value = getattr(move_line, field, "")
-                            if field_obj.type == "many2one":
-                                value = value.display_name if value else ""
-                            elif field_obj.type in ("one2many", "many2many"):
-                                value = ", ".join(value.mapped("display_name"))
-                            value = value or ""
-    
-                            cells_text[f"{letter}{no}"] = {"content": f"{value}"}
-    
-                    
-                    # Convert amount formula
-                    cells1 = json_data_text.get("sheets")[0].get("cells")
-                    sheet1_backup = copy.deepcopy(json_data_text.get("sheets")[0])
-    
-                    # Backup Data Formula to sheet 3
-                    json_data_text.get("sheets").append(sheet1_backup)
-                    json_data_text["sheets"][2].update(
-                        {"id": "backupsheetformula", "name": "Backup Sheet Formula"}
-                    )
-    
-                    pattern = re.compile(
-                        r"""(?ix)           # ignore case, verbose
-                        ([+\-]?)\s*         # optional sign
-                        (?:                 # start big non-capture group
-                            sumifs\(
-                                [^!]+!([A-Z]+):[A-Z]+\s*,\s*
-                                [^!]+!([A-Z]+):[A-Z]+\s*,\s*
-                                ([A-Z]+\d+)
-                            \)
-                          |                # OR
-                            sum\(\s*
-                                ([A-Z]+\d+):([A-Z]+\d+)
-                            \)
-                        )"""
-                    )
-    
-                    # calculate sumifs first
-                    for cell_id, cell_data in cells1.items():
-                        content = cell_data.get("content", "")
-                        if isinstance(content, str) and "sumifs" in content.lower():
-                            matches = pattern.findall(content)
-                            sum_amount = 0
-                            if matches:
-                                for m in matches:
-                                    (
-                                        sign,
-                                        sum_col,
-                                        crit_col,
-                                        crit_cell,
-                                        start_cell,
-                                        end_cell,
-                                    ) = m
-                                    sign = sign or "+"
-                                    if sum_col:  # it’s a SUMIFS
-                                        crit_value = cells1.get(crit_cell, {}).get(
-                                            "content"
-                                        )
-                                        # Step 2: search in the other sheet’s crit_col column for the same content
-                                        found_cells = []
-                                        for other_key, other_data in cells_text.items():
-                                            if other_data.get("content") == crit_value:
-                                                found_cells.append(
-                                                    "".join(filter(str.isdigit, other_key))
-                                                )
-                                        total_amount = 0
-                                        for key in found_cells:
-                                            amount = cells_text.get(sum_col + str(key)).get("content") or 0
-                                            total_amount += float(amount)
-                                        sum_amount += total_amount if sign == "+" else -total_amount
-    
-                            cells1.get(cell_id).update({"content": abs(sum_amount)})
-    
-                    for cell_id, cell_data in cells1.items():
-                        content = cell_data.get("content", "")
-                        if isinstance(content, str) and "sum" in content.lower() and "sumifs" not in content.lower():
-                            def val(cid):
-                                v = str(cells1.get(cid, {}).get("content", "")).strip()
-                                return float(v) if v else 0
-                            total = 0
-                            for arg in content[5:-1].split(','):          # ambil isi SUM(...)
-                                arg = arg.strip()
-                                if ':' in arg:                            # jika range
-                                    start, end = arg.split(':')
-                                    col = ''.join(filter(str.isalpha, start))
-                                    r1 = int(''.join(filter(str.isdigit, start)))
-                                    r2 = int(''.join(filter(str.isdigit, end)))
-                                    for r in range(r1, r2 + 1):
-                                        total += val(f"{col}{r}")
-                                else:                                     # jika cell tunggal
-                                    total += val(arg)
-                            cells1.get(cell_id).update({"content": total})
-    
-                    last_col_letter = string.ascii_uppercase[len(headers) - 1]
-                    last_row_number = len(all_move_lines) + 1
-                    new_range = f"A1:{last_col_letter}{last_row_number}"
-    
-                    sheets.get("tables")[0].update({"range": new_range})
-                    sheets_text.get("tables")[0].update({"range": new_range})
-    
-                    json_data.get("sheets")[1].update({"cells": cells})
-                    json_data_text.get("sheets")[1].update({"cells": cells_text})
-    
-                    # update domain → semua moves
-                    domain = json_data["lists"]["1"]["domain"]
-                    domain = [("move_id", "in", moves.ids)]
-                    json_data["lists"]["1"].update({"domain": domain})
-                    json_data_text["lists"]["1"].update({"domain": domain})
-    
-                    # encode back to base64
-                    updated_json_str = json.dumps(json_data)
-                    updated_binary = base64.b64encode(updated_json_str.encode("utf-8"))
-    
-                    new_dashboard.spreadsheet_binary_data = updated_binary
-                    new_dashboard.cds_json_converted = str(json_data_text)
-                    new_dashboard.cds_dashboard_date = date
-            self._unlink_dashboard_last_year(date)
+
+        for new_dashboard in new_group.dashboard_ids:
+            # all dashboard should has same date
+            new_dashboard.write({
+                'cds_dashboard_date': start,
+                'cds_dashboard_date_end': end,
+            })
+            new_dashboard.generate_all_balance()
+            all_lines = new_dashboard.cds_sdic_ids
+
+            binary_data = new_dashboard.spreadsheet_binary_data
+            if not binary_data:
+                continue
+
+            decoded_bytes = base64.b64decode(binary_data)
+            json_data = json.loads(decoded_bytes.decode("utf-8"))
+
+            # headers = json_data["lists"]["1"]["columns"]
+
+            sheets = json_data.get("sheets")[1]
+            cells = sheets.get("cells", {})
+
+            headers = self.get_header(cells)
+
+            # clear cell value
+            cells.clear()
+            # rewrite the cells
+            for i, field in enumerate(headers):
+                field_obj = self.env[
+                    "spreadsheet.dashboard.ifrs.calculator"
+                ]._fields.get(field)
+                if not field_obj:
+                    continue
+
+                letter = string.ascii_uppercase[i]
+                no = 1
+
+                # Keep Odoo format
+                cells[f"{letter}{no}"] = {"content": f'=ODOO.LIST.HEADER(1,"{field}")'}
+
+                for ifrs in all_lines:
+                    no += 1
+                    cells[f"{letter}{no}"] = {
+                        "content": f'=ODOO.LIST(1,{no-1},"{field}")'
+                    }
+
+            json_data.get("sheets")[1].update({"cells": cells})
+
+            # update domain → semua moves
+            domain = json_data["lists"]["1"]["domain"]
+            domain = [("id", "in", all_lines.ids)]
+            json_data["lists"]["1"].update({"domain": domain})
+            json_data["lists"]["1"].update({"model": "spreadsheet.dashboard.ifrs.calculator"})
+
+            # encode back to base64
+            updated_json_str = json.dumps(json_data)
+            updated_binary = base64.b64encode(updated_json_str.encode("utf-8"))
+
+            new_dashboard.spreadsheet_binary_data = updated_binary
+        self._unlink_dashboard_last_year(new_group.dashboard_ids)

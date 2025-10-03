@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Accounting Extension",
-    "version": "18.0.0.0.1",
+    "version": "18.0.0.0.3",
     "license": "OPL-1",
     "summary": "Accounting Extension",
     "category": "Accounting",
