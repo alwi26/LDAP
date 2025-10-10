@@ -1,5 +1,5 @@
 from odoo import _, fields, models, api
-import json
+import subprocess, json, tempfile
 from datetime import datetime, timedelta, date
 from openpyxl import Workbook
 from xlcalculator import ModelCompiler, Evaluator, xltypes
@@ -8,6 +8,8 @@ import base64
 import string
 import copy
 import gc
+import os
+import sys
 
 
 class SpreadsheetDashboard(models.Model):
@@ -99,50 +101,73 @@ class SpreadsheetDashboard(models.Model):
             return val
 
     def evaluate_json_excel(self, json_data):
+        tmp_dir = tempfile.gettempdir()
+        json_file_path = os.path.join(tmp_dir, "evaluate_excel_input.json")
+        with open(json_file_path, "w", encoding="utf-8") as f:
+            json.dump(json_data, f)
+
+        # Path ke script worker di folder yang sama
+        script_path = os.path.join(os.path.dirname(__file__), "evaluate_excel_worker.py")
+
+        # Gunakan interpreter Python yang sama dengan Odoo
+        python_exec = sys.executable
+        cmd = [python_exec, script_path, json_file_path]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
+        if result.returncode != 0:
+            raise Exception(f"Worker failed: {result.stderr}")
+
         try:
-            # 1. Simpan JSON ke Excel di memory (BytesIO)
-            stream = io.BytesIO()
-            wb = Workbook()
-            wb.remove(wb.active)  # hapus sheet default
+            return json.loads(result.stdout)
+        except Exception:
+            return {"error": result.stdout}
 
-            for sheet_name, cells in json_data.items():
-                ws = wb.create_sheet(title=sheet_name)
-                for cell, value in cells.items():
-                    ws[cell] = value
-            wb.save(stream)
-            stream.seek(0)
+    # def evaluate_json_excel(self, json_data):
+    #     try:
+    #         # 1. Simpan JSON ke Excel di memory (BytesIO)
+    #         stream = io.BytesIO()
+    #         wb = Workbook()
+    #         wb.remove(wb.active)  # hapus sheet default
 
-            # 2. Compile sekali saja
-            model = ModelCompiler().read_and_parse_archive(stream)
-            evaluator = Evaluator(model)
+    #         for sheet_name, cells in json_data.items():
+    #             ws = wb.create_sheet(title=sheet_name)
+    #             for cell, value in cells.items():
+    #                 ws[cell] = value
+    #         wb.save(stream)
+    #         stream.seek(0)
 
-            # 3. Evaluasi semua cell
-            result = {}
-            for sheet_name, cells in json_data.items():
-                result[sheet_name] = {}
-                for cell, value in cells.items():
-                    try:
-                        if isinstance(value, str) and value.startswith("="):
-                            # formula → evaluasi
-                            val = evaluator.evaluate(f"{sheet_name}!{cell}")
-                            val = self.unwrap_value(val)
-                        else:
-                            # plain value
-                            val = value
-                    except Exception as e:
-                        val = f"#ERR {e}"
-                    result[sheet_name][cell] = {"content": val}
+    #         # 2. Compile sekali saja
+    #         model = ModelCompiler().read_and_parse_archive(stream)
+    #         evaluator = Evaluator(model)
 
-            return result
+    #         # 3. Evaluasi semua cell
+    #         result = {}
+    #         for sheet_name, cells in json_data.items():
+    #             result[sheet_name] = {}
+    #             for cell, value in cells.items():
+    #                 try:
+    #                     if isinstance(value, str) and value.startswith("="):
+    #                         # formula → evaluasi
+    #                         val = evaluator.evaluate(f"{sheet_name}!{cell}")
+    #                         val = self.unwrap_value(val)
+    #                     else:
+    #                         # plain value
+    #                         val = value
+    #                 except Exception as e:
+    #                     val = f"#ERR {e}"
+    #                 result[sheet_name][cell] = {"content": val}
 
-        finally:
-            # Bersihkan memory besar agar Odoo worker tidak overload
-            try:
-                wb.close()
-            except Exception:
-                pass
-            del wb, model, evaluator, stream, json_data, sheet_name, cells, cell, value
-            gc.collect()  # Force garbage collection untuk bebaskan RAM
+    #         return result
+
+    #     finally:
+    #         # Bersihkan memory besar agar Odoo worker tidak overload
+    #         try:
+    #             wb.close()
+    #         except Exception:
+    #             pass
+    #         del wb, model, evaluator, stream, json_data, sheet_name, cells, cell, value
+    #         gc.collect()  # Force garbage collection untuk bebaskan RAM
 
     def convert_json_text(self):
         for dashboard in self:

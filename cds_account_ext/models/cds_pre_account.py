@@ -111,7 +111,7 @@ class CdsPreAccountMoveLine(models.Model):
     @api.depends("cds_transaction_currency")
     def _compute_convert_transaction_currency(self):
         for rec in self:
-            if rec.cds_transaction_currency.upper() != "IDR":
+            if rec.cds_transaction_currency and rec.cds_transaction_currency.upper() != "IDR":
                 idr = self.env.ref('base.IDR')
                 convert_currency = self.env['res.currency'].search([("name", "=", rec.cds_transaction_currency.upper())], limit=1)
                 convert = convert_currency._convert(
