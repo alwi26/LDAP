@@ -22,6 +22,7 @@ class CdsPreAccountMoveLine(models.Model):
     cds_amount_in_functional_currency = fields.Float(
         string="Amount in Functional Currency",
         compute="_compute_convert_transaction_currency",
+        store=True
     )
     cds_amount_in_transaction_currency = fields.Float(
         string="Amount in Transaction Currency"
@@ -103,17 +104,17 @@ class CdsPreAccountMoveLine(models.Model):
     cds_sub_movement2_of_master_account = fields.Char(
         string="Sub-Movement 2 of Master Account"
     )
-    cds_category_column = fields.Char("Category Column")
+    cds_package_name = fields.Char("Category Column")
     cds_generate_done = fields.Boolean()
-    pre_journal_items_bkey = fields.Integer(string="Data Warehouse IFRS ID")
+    pre_journal_items_bkey = fields.Char(string="Data Warehouse IFRS ID")
 
     @api.depends("cds_transaction_currency")
     def _compute_convert_transaction_currency(self):
         for rec in self:
-            if rec.cds_transaction_currency == "USD":
-                idr = rec.env["res.currency"].browse(12)
-                usd = rec.env["res.currency"].browse(1)
-                convert = usd._convert(
+            if rec.cds_transaction_currency.upper() != "IDR":
+                idr = self.env.ref('base.IDR')
+                convert_currency = self.env['res.currency'].search([("name", "=", rec.cds_transaction_currency.upper())], limit=1)
+                convert = convert_currency._convert(
                     rec.cds_amount_in_transaction_currency,
                     idr,
                     self.env.company,
@@ -163,7 +164,7 @@ class CdsPreAccountMoveLine(models.Model):
         pre_lines_by_group = {}
         for line in pre_lines:
             month_key = line.cds_date.strftime("%Y-%m")
-            group_key = (line.cds_category_column, month_key)
+            group_key = (line.cds_package_name, month_key)
             pre_lines_by_group.setdefault(group_key, []).append(line)
 
         created_moves = self.env["account.move"]
@@ -180,12 +181,12 @@ class CdsPreAccountMoveLine(models.Model):
 
             move_lines_vals = []
             for pre_line in lines:
-                account = self.env["account.account"].search(
-                    [("code", "=", pre_line.cds_account_code)], limit=1
+                mapping_account = self.env["cds_mapping.account.account"].search(
+                    [("cds_account_code", "=", pre_line.cds_account_code)], limit=1
                 )
-                if not account:
+                if not mapping_account:
                     raise UserError(f"Account {pre_line.cds_account_code} not found.")
-
+                account = mapping_account.cds_account_id
                 analytic_distribution = {}
                 mappings = self.env["cds_mapping.analyitc.plan"].search([])
                 for mapping in mappings:
@@ -202,7 +203,7 @@ class CdsPreAccountMoveLine(models.Model):
                         )
                         if acc:
                             analytic_distribution[acc.id] = 100
-                            pre_line.cds_category_column = category
+                            pre_line.cds_package_name = category
 
                 move_lines_vals.append(
                     (
@@ -221,6 +222,7 @@ class CdsPreAccountMoveLine(models.Model):
 
                 pre_line.write({"cds_generate_done": True})
             move.write({"line_ids": move_lines_vals})
+
             created_moves |= move
 
         return True
@@ -248,33 +250,18 @@ class CdsPreAccountMoveLine(models.Model):
             dashboard_group |= last_year_dashboard.dashboard_group_id
 
             if last_year_dashboard:
+
                 last_year_dashboard.cds_sdic_ids.unlink()
                 last_year_dashboard.unlink()
         dashboard_group.unlink()
 
     def next_date_range(self, start_date, end_date):
-        # 1. Tahun penuh
-        if (start_date.month, start_date.day) == (1, 1) and (end_date.month, end_date.day) == (12, 31):
-            return (start_date.replace(year=start_date.year + 1),
-                    end_date.replace(year=end_date.year + 1))
+        # Ambil bulan berikutnya dari end_date
+        next_month_start = (end_date + relativedelta(months=1)).replace(day=1)
+        last_day_next_month = calendar.monthrange(next_month_start.year, next_month_start.month)[1]
+        next_month_end = next_month_start.replace(day=last_day_next_month)
 
-        # 2. Cek apakah periode terdiri dari bulan penuh
-        last_day = calendar.monthrange(end_date.year, end_date.month)[1]
-        if start_date.day == 1 and end_date.day == last_day:
-            # berapa bulan span
-            months_span = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
-            start_next = start_date + relativedelta(months=months_span)
-            # end = last day bulan end_next
-            end_next = start_next + relativedelta(months=months_span) - relativedelta(days=1)
-            last_day_new = calendar.monthrange(end_next.year, end_next.month)[1]
-            end_next = end_next.replace(day=last_day_new)
-            return start_next, end_next
-
-        # 3. Fallback: geser berdasarkan jumlah hari
-        days = (end_date - start_date).days + 1
-        start_next = end_date + timedelta(days=1)
-        end_next = start_next + timedelta(days=days - 1)
-        return start_next, end_next
+        return next_month_start, next_month_end
 
     def get_header(self, cells):
         headers = []
@@ -290,7 +277,7 @@ class CdsPreAccountMoveLine(models.Model):
 
     def _recycle_dashboard_json(self):
         dashboard_group = self.env["spreadsheet.dashboard.group"].search(
-            [("create_date", "<", fields.Date.today()), ("name", "ilike", "IFRS")],
+            [("create_date", "<=", fields.Date.today()), ("name", "ilike", "IFRS")],
             order="create_date desc",
             limit=1,
         )
@@ -301,8 +288,8 @@ class CdsPreAccountMoveLine(models.Model):
         dashboard = dashboard_group.dashboard_ids and dashboard_group.dashboard_ids[0]
         start, end = self.next_date_range(dashboard.cds_dashboard_date, dashboard.cds_dashboard_date_end)
 
-        s_str = start.strftime("%#d %B %Y")
-        e_str = end.strftime("%#d %B %Y")
+        s_str = start.strftime("%d %B %Y")
+        e_str = end.strftime("%d %B %Y")
         dashboard_name = f"IFRS ({s_str} - {e_str})"
         # existing_dashboard_group = self.env["spreadsheet.dashboard.group"].search(
         #     [("name", "=", dashboard_name)], limit=1

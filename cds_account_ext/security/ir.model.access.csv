@@ -3,3 +3,4 @@ access_cds_pre_account_move_line,access.cds.pre.account.move.line,model_cds_pre_
 access_cds_mapping_analyitc_plan,access.cds_mapping.analyitc.plan,model_cds_mapping_analyitc_plan,,1,1,1,1
 access_wizard_recycle_journal,access_wizard_recycle_journal,model_wizard_recycle_journal,,1,1,1,1
 access_sdic,access.sdic,model_spreadsheet_dashboard_ifrs_calculator,,1,1,1,1
+access_cds_mapping_account_account,access_cds_mapping_account_account,model_cds_mapping_account_account,,1,1,1,1

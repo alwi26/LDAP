@@ -7,6 +7,7 @@ import io
 import base64
 import string
 import copy
+import gc
 
 
 class SpreadsheetDashboard(models.Model):
@@ -98,40 +99,50 @@ class SpreadsheetDashboard(models.Model):
             return val
 
     def evaluate_json_excel(self, json_data):
-        # 1. Simpan JSON ke Excel di memory (BytesIO)
-        stream = io.BytesIO()
-        wb = Workbook()
-        wb.remove(wb.active)  # hapus sheet default
+        try:
+            # 1. Simpan JSON ke Excel di memory (BytesIO)
+            stream = io.BytesIO()
+            wb = Workbook()
+            wb.remove(wb.active)  # hapus sheet default
 
-        for sheet_name, cells in json_data.items():
-            ws = wb.create_sheet(title=sheet_name)
-            for cell, value in cells.items():
-                ws[cell] = value
-        wb.save(stream)
-        stream.seek(0)
+            for sheet_name, cells in json_data.items():
+                ws = wb.create_sheet(title=sheet_name)
+                for cell, value in cells.items():
+                    ws[cell] = value
+            wb.save(stream)
+            stream.seek(0)
 
-        # 2. Compile sekali saja
-        model = ModelCompiler().read_and_parse_archive(stream)
-        evaluator = Evaluator(model)
+            # 2. Compile sekali saja
+            model = ModelCompiler().read_and_parse_archive(stream)
+            evaluator = Evaluator(model)
 
-        # 3. Evaluasi semua cell
-        result = {}
-        for sheet_name, cells in json_data.items():
-            result[sheet_name] = {}
-            for cell, value in cells.items():
-                try:
-                    if isinstance(value, str) and value.startswith("="):
-                        # formula → evaluasi
-                        val = evaluator.evaluate(f"{sheet_name}!{cell}")
-                        val = self.unwrap_value(val)
-                    else:
-                        # plain value
-                        val = value
-                except Exception as e:
-                    val = f"#ERR {e}"
-                result[sheet_name][cell] = {"content": val}
+            # 3. Evaluasi semua cell
+            result = {}
+            for sheet_name, cells in json_data.items():
+                result[sheet_name] = {}
+                for cell, value in cells.items():
+                    try:
+                        if isinstance(value, str) and value.startswith("="):
+                            # formula → evaluasi
+                            val = evaluator.evaluate(f"{sheet_name}!{cell}")
+                            val = self.unwrap_value(val)
+                        else:
+                            # plain value
+                            val = value
+                    except Exception as e:
+                        val = f"#ERR {e}"
+                    result[sheet_name][cell] = {"content": val}
 
-        return result
+            return result
+
+        finally:
+            # Bersihkan memory besar agar Odoo worker tidak overload
+            try:
+                wb.close()
+            except Exception:
+                pass
+            del wb, model, evaluator, stream, json_data, sheet_name, cells, cell, value
+            gc.collect()  # Force garbage collection untuk bebaskan RAM
 
     def convert_json_text(self):
         for dashboard in self:
@@ -214,7 +225,7 @@ class SpreadsheetDashboardIFRSCalculator(models.Model):
 
     spreadsheet_dashboard_id = fields.Many2one("spreadsheet.dashboard", required=True)
     name = fields.Char("Name", compute="_get_name")
-    account_code = fields.Many2one("account.account", required=True)
+    account_code = fields.Many2one("account.account")
     join3 = fields.Char("Join 3")
     join4 = fields.Char("Join 4")
     join5 = fields.Char("Join 5")
@@ -224,8 +235,8 @@ class SpreadsheetDashboardIFRSCalculator(models.Model):
     join9 = fields.Char("Join 9")
     join10 = fields.Char("Join 10")
     join11 = fields.Char("Join 11")
-    reportline = fields.Char("Report Line", required=True)
-    column = fields.Char("Column", required=True)
+    reportline = fields.Char("Report Line")
+    column = fields.Char("Column")
     balance = fields.Monetary(
         string="Balance",
         currency_field="currency_id",

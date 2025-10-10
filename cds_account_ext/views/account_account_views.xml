@@ -26,6 +26,15 @@
                         </group>
                     </group>
                 </page>
+                <page name="coa_mapping" string="CoA Mapping">
+                    <field name="cds_coa_mapping">
+                        <list editable="bottom">
+                            <field name="cds_source_account"/>
+                            <field name="cds_account_code"/>
+                            <field name="cds_account_name"/>
+                        </list>
+                    </field>
+                </page>
             </xpath>
         </field>
     </record>

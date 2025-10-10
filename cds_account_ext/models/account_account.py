@@ -43,3 +43,4 @@ class AccountAccount(models.Model):
         string="Account Report Group Axis2.4 - Contract & Loss",
     )
     cds_level_1_parent = fields.Many2many(related="company_ids", string="Level 1 Parent ")
+    cds_coa_mapping = fields.One2many('cds_mapping.account.account', 'cds_account_id', string='CoA Mapping')

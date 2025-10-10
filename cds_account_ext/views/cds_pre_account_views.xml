@@ -57,7 +57,7 @@
                     <field name="cds_lrc_lic_and_onerousness_of_master_account" optional="hide"/>
                     <field name="cds_section_of_master_account" optional="hide"/>
                     <field name="cds_generate_done" optional="hide"/>
-                    <field name="cds_category_column" optional="hide"/>
+                    <field name="cds_package_name" optional="hide"/>
                 </list>
             </field>
         </record>
