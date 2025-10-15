@@ -19,6 +19,7 @@
         "views/account_move_line_views.xml",
         "views/analytic_plan_mapping_views.xml",
         "views/spreadsheet_dashboard.xml",
+        "views/res_config_views.xml",
         "wizards/recycle_journal.xml",
     ],
     "assets": {

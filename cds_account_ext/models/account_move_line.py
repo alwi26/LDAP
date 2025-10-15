@@ -1,5 +1,6 @@
-from odoo import models, fields
-
+from odoo import models, fields, api
+import logging
+_logger = logging.getLogger(__name__)
 
 class AccountMoveLine(models.Model):
     _inherit = "account.move.line"
@@ -55,3 +56,16 @@ class AccountMoveLine(models.Model):
         string="Account Report Group Axis2.4 - Contract & Loss",
         related="account_id.cds_account_report_group_axis_8",
     )
+
+    # @api.depends('balance', 'move_id.is_storno')
+    # def _compute_debit_credit(self):
+    #     for line in self:
+    #         if line.cds_pre_account_id:
+    #             if line.cds_pre_account_id.cds_balance_type == 'dr':
+    #                 line.debit = line.cds_pre_account_id.cds_debit
+    #                 line.credit = 0
+    #             elif line.cds_pre_account_id.cds_balance_type == 'cr':
+    #                 line.debit = 0
+    #                 line.credit = line.cds_pre_account_id.cds_credit
+    #         else:
+    #             return super(AccountMoveLine, self)._compute_debit_credit()

@@ -104,11 +104,11 @@ class CdsPreAccountMoveLine(models.Model):
     cds_sub_movement2_of_master_account = fields.Char(
         string="Sub-Movement 2 of Master Account"
     )
-    cds_package_name = fields.Char("Category Column")
+    cds_package_name = fields.Char("Package Name")
     cds_generate_done = fields.Boolean()
     pre_journal_items_bkey = fields.Char(string="Data Warehouse IFRS ID")
 
-    @api.depends("cds_transaction_currency")
+    @api.depends("cds_transaction_currency", "cds_amount_in_transaction_currency")
     def _compute_convert_transaction_currency(self):
         for rec in self:
             if rec.cds_transaction_currency and rec.cds_transaction_currency.upper() != "IDR":
@@ -184,9 +184,12 @@ class CdsPreAccountMoveLine(models.Model):
                 mapping_account = self.env["cds_mapping.account.account"].search(
                     [("cds_account_code", "=", pre_line.cds_account_code)], limit=1
                 )
-                if not mapping_account:
+                mapping_account_account = self.env["account.account"].search(
+                    [("code", "=", pre_line.cds_account_code)], limit=1
+                )
+                if not mapping_account and not mapping_account_account:
                     raise UserError(f"Account {pre_line.cds_account_code} not found.")
-                account = mapping_account.cds_account_id
+                account = mapping_account.cds_account_id or mapping_account_account
                 analytic_distribution = {}
                 mappings = self.env["cds_mapping.analyitc.plan"].search([])
                 for mapping in mappings:
@@ -213,6 +216,7 @@ class CdsPreAccountMoveLine(models.Model):
                             "name": pre_line.cds_run_description,
                             "account_id": account.id,
                             "debit": pre_line.cds_debit,
+                            # "credit": abs(pre_line.cds_credit),
                             "credit": pre_line.cds_credit,
                             "analytic_distribution": analytic_distribution,
                             "cds_pre_account_id": pre_line.id,
@@ -221,14 +225,29 @@ class CdsPreAccountMoveLine(models.Model):
                 )
 
                 pre_line.write({"cds_generate_done": True})
+            total_debit = sum(line_val[2].get('debit', 0.0) for line_val in move_lines_vals)
+            total_credit = sum(line_val[2].get('credit', 0.0) for line_val in move_lines_vals)
+            # diff = round(total_debit - abs(total_credit), 2)
+            diff = round(total_debit - total_credit, 2)
+
+            if diff != 0:
+                _logger.warning(f"Balancing diff detected (before write): {diff}")
+                move_lines_vals.append(
+                    (0, 0, {
+                        "name": "Auto Balancing",
+                        "account_id": 811,
+                        "debit": 0.0 if diff > 0 else abs(diff),
+                        "credit": diff if diff > 0 else 0.0,
+                    })
+                )
+            
+            # Tulis semua line termasuk balancing line ke move
             move.write({"line_ids": move_lines_vals})
-
             created_moves |= move
-
         return True
 
     def _shift_year_safe(self, d, years_back=1):
-        """Geser tahun ke belakang, fallback ke last day of month jika tanggal tidak ada (contoh 29 Feb)."""
+        """Geser tahun ke belakang, fallback ke last day of month jika tanggal tidak ada (misalnya 29 Feb)."""
         try:
             return d.replace(year=d.year - years_back)
         except ValueError:
@@ -236,32 +255,82 @@ class CdsPreAccountMoveLine(models.Model):
             return date(d.year - years_back, d.month, last_day)
 
     def _unlink_dashboard_last_year(self, dashboard_ids):
-        dashboard_group = self.env["spreadsheet.dashboard.group"]
+        Dashboard = self.env["spreadsheet.dashboard"]
+        DashboardGroup = self.env["spreadsheet.dashboard.group"]
+
+        dashboards_to_unlink = Dashboard
+        groups_to_unlink = DashboardGroup
+
         for dashboard in dashboard_ids:
-            last_year_date_start = self._shift_year_safe(dashboard.cds_dashboard_date)
-            last_year_date_end = self._shift_year_safe(dashboard.cds_dashboard_date_end)
+            if not dashboard.cds_dashboard_date or not dashboard.cds_dashboard_date_end:
+                continue
 
-            # pakai range overlap, bukan strict equality
-            last_year_dashboard = self.env["spreadsheet.dashboard"].search([
-                ("cds_dashboard_date", "<=", last_year_date_end),
-                ("cds_dashboard_date_end", ">=", last_year_date_start),
-            ], limit=1)
+            last_year_start = self._shift_year_safe(dashboard.cds_dashboard_date)
+            last_year_end = self._shift_year_safe(dashboard.cds_dashboard_date_end)
 
-            dashboard_group |= last_year_dashboard.dashboard_group_id
+            # 🟡 Cari dashboard tahun lalu dengan rentang yang SAMA persis, bukan overlap
+            last_year_dashboards = Dashboard.search(
+                [
+                    ("cds_dashboard_date", "=", last_year_start),
+                    ("cds_dashboard_date_end", "=", last_year_end),
+                ]
+            )
 
-            if last_year_dashboard:
+            if not last_year_dashboards:
+                last_year_dashboards = Dashboard.search(
+                    [
+                        ("cds_dashboard_date", ">=", last_year_start),
+                        ("cds_dashboard_date_end", "<=", last_year_end),
+                    ]
+                )
 
-                last_year_dashboard.cds_sdic_ids.unlink()
-                last_year_dashboard.unlink()
-        dashboard_group.unlink()
+            if last_year_dashboards:
+                dashboards_to_unlink |= last_year_dashboards
+                groups_to_unlink |= last_year_dashboards.mapped("dashboard_group_id")
+
+        # 🧹 Unlink batch
+        if dashboards_to_unlink:
+            dashboards_to_unlink.mapped("cds_sdic_ids").unlink()
+            dashboards_to_unlink.unlink()
+
+        if groups_to_unlink:
+            groups_to_unlink.unlink()
 
     def next_date_range(self, start_date, end_date):
-        # Ambil bulan berikutnya dari end_date
-        next_month_start = (end_date + relativedelta(months=1)).replace(day=1)
-        last_day_next_month = calendar.monthrange(next_month_start.year, next_month_start.month)[1]
-        next_month_end = next_month_start.replace(day=last_day_next_month)
+        period_type = self.env.company.period_type or "month"
 
-        return next_month_start, next_month_end
+        if period_type == "month":
+            next_start = (end_date + relativedelta(months=1)).replace(day=1)
+            last_day = calendar.monthrange(next_start.year, next_start.month)[1]
+            next_end = next_start.replace(day=last_day)
+
+        elif period_type == "quarter":
+            next_start = (end_date + relativedelta(months=1)).replace(day=1)
+            quarter = ((next_start.month - 1) // 3) + 1
+            quarter_start_month = 3 * (quarter - 1) + 1
+            quarter_end_month = quarter_start_month + 2
+            next_start = next_start.replace(month=quarter_start_month, day=1)
+            last_day = calendar.monthrange(next_start.year, quarter_end_month)[1]
+            next_end = next_start.replace(month=quarter_end_month, day=last_day)
+
+        elif period_type == "year":
+            if end_date.month == 12:
+                next_start = date(end_date.year + 1, 1, 1)
+            else:
+                next_start = date(end_date.year, end_date.month + 1, 1)
+
+            end_month = next_start.month - 1 or 12
+            end_year = next_start.year + 1
+
+            if end_month == 12 and end_date.month == 1:
+                end_year = end_date.year + 1
+
+            last_day = calendar.monthrange(end_year, end_month)[1]
+            next_end = date(end_year, end_month, last_day)
+
+        else:
+            raise ValueError(f"Unknown period_type: {period_type}")
+        return next_start, next_end
 
     def get_header(self, cells):
         headers = []
