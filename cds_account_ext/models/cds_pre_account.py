@@ -139,16 +139,32 @@ class CdsPreAccountMoveLine(models.Model):
     )
     def _compute_debit_credit(self):
         for rec in self:
-            rec.cds_debit = (
-                rec.cds_amount_in_currency_conversion
-                if rec.cds_balance_type == "dr"
-                else 0.0
-            )
-            rec.cds_credit = (
-                rec.cds_amount_in_currency_conversion
-                if rec.cds_balance_type == "cr"
-                else 0.0
-            )
+            if rec.cds_amount_in_currency_conversion < 0 and rec.cds_movement_of_master_account == "Movement":
+                rec.cds_debit = 0
+                rec.cds_credit = -1*rec.cds_amount_in_currency_conversion
+            elif rec.cds_amount_in_currency_conversion < 0 and rec.cds_movement_of_master_account != "Movement":
+                rec.cds_debit = (
+                    rec.cds_amount_in_currency_conversion
+                    if rec.cds_amount_in_currency_conversion > 0
+                    else 0.0
+                )
+                rec.cds_credit = (
+                    -1 * rec.cds_amount_in_currency_conversion
+                    if rec.cds_amount_in_currency_conversion < 0
+                    else 0.0
+                )
+            else:
+                rec.cds_debit = (
+                    rec.cds_amount_in_currency_conversion
+                    if rec.cds_balance_type == "dr"
+                    else 0.0
+                )
+                rec.cds_credit = (
+                    rec.cds_amount_in_currency_conversion
+                    if rec.cds_balance_type == "cr"
+                    else 0.0
+                )
+
 
     def action_generate_journal_entries(self):
         journal = self.env["account.journal"].search(
