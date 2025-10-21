@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+         <record id="res_currency_inherit_currency_digit" model="ir.ui.view">
+            <field name="name">res.currency.inherit.currency.digit</field>
+            <field name="model">res.currency</field>
+            <field name="inherit_id" ref="base.view_currency_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='inverse_company_rate']" position="attributes">
+                    <attribute name="digits"></attribute>
+                </xpath>
+            </field>
+        </record>
+    </data>
+</odoo>

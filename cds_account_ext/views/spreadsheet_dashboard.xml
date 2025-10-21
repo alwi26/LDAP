@@ -70,7 +70,6 @@
                             <button name="generate_all_balance" type="object" string="Calculate" class="btn-primary"/>
                             <field name="cds_sdic_ids">
                                 <list editable="top">
-                                    <button name="generate_balance" type="object" string="Calculate" class="btn-primary"/>
                                     <field name="name"/>
                                     <field name="negative_bool"/>
                                     <field name="account_code"/>
@@ -92,6 +91,7 @@
                         </page>
                     </notebook>
                 </sheet>
+                <chatter></chatter>
             </xpath>
         </field>
     </record>

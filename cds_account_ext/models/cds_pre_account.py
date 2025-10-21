@@ -107,6 +107,7 @@ class CdsPreAccountMoveLine(models.Model):
     cds_package_name = fields.Char("Package Name")
     cds_generate_done = fields.Boolean()
     pre_journal_items_bkey = fields.Char(string="Data Warehouse IFRS ID")
+    cds_input_name = fields.Char("Input Name")
 
     @api.depends("cds_transaction_currency", "cds_amount_in_transaction_currency")
     def _compute_convert_transaction_currency(self):
@@ -289,6 +290,7 @@ class CdsPreAccountMoveLine(models.Model):
                 [
                     ("cds_dashboard_date", "=", last_year_start),
                     ("cds_dashboard_date_end", "=", last_year_end),
+                    ("dashboard_group_id","ilike","IFRS"),
                 ]
             )
 
@@ -297,6 +299,7 @@ class CdsPreAccountMoveLine(models.Model):
                     [
                         ("cds_dashboard_date", ">=", last_year_start),
                         ("cds_dashboard_date_end", "<=", last_year_end),
+                        ("dashboard_group_id","ilike","IFRS"),
                     ]
                 )
 
@@ -336,7 +339,7 @@ class CdsPreAccountMoveLine(models.Model):
                 next_start = date(end_date.year, end_date.month + 1, 1)
 
             end_month = next_start.month - 1 or 12
-            end_year = next_start.year + 1
+            end_year = next_start.year
 
             if end_month == 12 and end_date.month == 1:
                 end_year = end_date.year + 1
@@ -361,11 +364,20 @@ class CdsPreAccountMoveLine(models.Model):
         return headers
 
     def _recycle_dashboard_json(self):
-        dashboard_group = self.env["spreadsheet.dashboard.group"].search(
+        dashboard_group_template = self.env["spreadsheet.dashboard.group"].search(
+            [("create_date", "<=", fields.Date.today()), ("name", "ilike", "Template")],
+            order="create_date desc",
+            limit=1,
+        )
+        dashboard_group_ifrs = self.env["spreadsheet.dashboard.group"].search(
             [("create_date", "<=", fields.Date.today()), ("name", "ilike", "IFRS")],
             order="create_date desc",
             limit=1,
         )
+        if dashboard_group_ifrs:
+            dashboard_group = dashboard_group_ifrs
+        else:
+            dashboard_group = dashboard_group_template
 
         if not dashboard_group:
             return
@@ -439,7 +451,8 @@ class CdsPreAccountMoveLine(models.Model):
 
             json_data.get("sheets")[1].update({"cells": cells})
 
-            # update domain → semua moves
+            check_domain = next(iter(json_data.get("lists")), None)
+            json_data["lists"]["1"] = json_data.get("lists").pop(check_domain)
             domain = json_data["lists"]["1"]["domain"]
             domain = [("id", "in", all_lines.ids)]
             json_data["lists"]["1"].update({"domain": domain})

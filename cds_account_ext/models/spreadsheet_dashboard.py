@@ -13,11 +13,14 @@ import sys
 
 
 class SpreadsheetDashboard(models.Model):
-    _inherit = "spreadsheet.dashboard"
+    _name = "spreadsheet.dashboard"
+    _inherit = ["spreadsheet.dashboard", "mail.thread", "mail.activity.mixin"]
 
+    name = fields.Char(required=True, translate=True, tracking=True)
+    dashboard_group_id = fields.Many2one("spreadsheet.dashboard.group", tracking=True)
     cds_json_converted = fields.Char(string="JSON Converted", copy=False)
-    cds_dashboard_date = fields.Date(string="Dashboard Date Start")
-    cds_dashboard_date_end = fields.Date(string="Dashboard Date End")
+    cds_dashboard_date = fields.Date(string="Dashboard Date Start", tracking=True)
+    cds_dashboard_date_end = fields.Date(string="Dashboard Date End", tracking=True)
     cds_sdic_ids = fields.One2many(
         "spreadsheet.dashboard.ifrs.calculator",
         "spreadsheet_dashboard_id",
@@ -29,46 +32,55 @@ class SpreadsheetDashboard(models.Model):
         "ir.model.fields",
         "Join 3 Journal Item Matching Fields",
         domain="[('model_id.model', '=', 'account.move.line')]",
+        tracking=True,
     )
     join4_matching_field_id = fields.Many2one(
         "ir.model.fields",
         "Join 4 Journal Item Matching Fields",
         domain="[('model_id.model', '=', 'account.move.line')]",
+        tracking=True
     )
     join5_matching_field_id = fields.Many2one(
         "ir.model.fields",
         "Join 5 Journal Item Matching Fields",
         domain="[('model_id.model', '=', 'account.move.line')]",
+        tracking=True
     )
     join6_matching_field_id = fields.Many2one(
         "ir.model.fields",
         "Join 6 Journal Item Matching Fields",
         domain="[('model_id.model', '=', 'account.move.line')]",
+        tracking=True,
     )
     join7_matching_field_id = fields.Many2one(
         "ir.model.fields",
         "Join 7 Journal Item Matching Fields",
         domain="[('model_id.model', '=', 'account.move.line')]",
+        tracking=True,
     )
     join8_matching_field_id = fields.Many2one(
         "ir.model.fields",
         "Join 8 Journal Item Matching Fields",
         domain="[('model_id.model', '=', 'account.move.line')]",
+        tracking=True,
     )
     join9_matching_field_id = fields.Many2one(
         "ir.model.fields",
         "Join 9 Journal Item Matching Fields",
         domain="[('model_id.model', '=', 'account.move.line')]",
+        tracking=True,
     )
     join10_matching_field_id = fields.Many2one(
         "ir.model.fields",
         "Join 10 Journal Item Matching Fields",
         domain="[('model_id.model', '=', 'account.move.line')]",
+        tracking=True,
     )
     join11_matching_field_id = fields.Many2one(
         "ir.model.fields",
         "Join 11 Journal Item Matching Fields",
         domain="[('model_id.model', '=', 'account.move.line')]",
+        tracking=True,
     )
 
     def action_open_dashboard(self):
@@ -81,6 +93,15 @@ class SpreadsheetDashboard(models.Model):
         }
 
     def generate_all_balance(self):
+        self.message_post(
+            body=_(
+                f"""
+                Calculated IFRS Calculator
+                """
+            ),
+            subtype_xmlid="mail.mt_note",
+        )
+
         for sd in self:
             for sdic in sd.cds_sdic_ids:
                 sdic.generate_balance()
@@ -107,7 +128,9 @@ class SpreadsheetDashboard(models.Model):
             json.dump(json_data, f)
 
         # Path ke script worker di folder yang sama
-        script_path = os.path.join(os.path.dirname(__file__), "evaluate_excel_worker.py")
+        script_path = os.path.join(
+            os.path.dirname(__file__), "evaluate_excel_worker.py"
+        )
 
         # Gunakan interpreter Python yang sama dengan Odoo
         python_exec = sys.executable
@@ -241,14 +264,16 @@ class SpreadsheetDashboard(models.Model):
             domain = json_data_text["lists"]["1"]["domain"]
             json_data_text.get("sheets")[1].update({"cells": cells_text})
             json_data_text["lists"]["1"].update({"domain": domain})
-            json_data_text["lists"]["1"].update({"model": "spreadsheet.dashboard.ifrs.calculator"})
+            json_data_text["lists"]["1"].update(
+                {"model": "spreadsheet.dashboard.ifrs.calculator"}
+            )
             dashboard.cds_json_converted = str(json_data_text)
 
 
 class SpreadsheetDashboardIFRSCalculator(models.Model):
     _name = "spreadsheet.dashboard.ifrs.calculator"
 
-    spreadsheet_dashboard_id = fields.Many2one("spreadsheet.dashboard", required=True)
+    spreadsheet_dashboard_id = fields.Many2one("spreadsheet.dashboard")
     name = fields.Char("Name", compute="_get_name")
     account_code = fields.Many2one("account.account")
     join3 = fields.Char("Join 3")
@@ -265,7 +290,7 @@ class SpreadsheetDashboardIFRSCalculator(models.Model):
     balance = fields.Monetary(
         string="Balance",
         currency_field="currency_id",
-        tracking=True,
+        readonly=True
     )
     negative_bool = fields.Boolean("Negative")
     currency_id = fields.Many2one(
