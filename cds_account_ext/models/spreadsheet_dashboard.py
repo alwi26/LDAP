@@ -10,6 +10,32 @@ import copy
 import gc
 import os
 import sys
+import calendar
+
+
+class SpreadsheetDashboardGroup(models.Model):
+    _inherit = "spreadsheet.dashboard.group"
+
+    period_type = fields.Selection(
+        [
+            ('month', 'Month'),
+            ('quarter', 'Quarter'),
+            ('year', 'Year'),
+        ],
+        string='Default Period Type',
+    )
+    cds_dashboard_date = fields.Date(string="Dashboard Date Start", tracking=True)
+    cds_dashboard_date_end = fields.Date(string="Dashboard Date End", tracking=True)
+
+    def update_dashboard_date(self):
+        for group in self:
+            if group.cds_dashboard_date and group.cds_dashboard_date_end:
+                group.dashboard_ids.write(
+                    {
+                        "cds_dashboard_date": group.cds_dashboard_date,
+                        "cds_dashboard_date_end": group.cds_dashboard_date_end,
+                    }
+                )
 
 
 class SpreadsheetDashboard(models.Model):
@@ -21,6 +47,7 @@ class SpreadsheetDashboard(models.Model):
     cds_json_converted = fields.Char(string="JSON Converted", copy=False)
     cds_dashboard_date = fields.Date(string="Dashboard Date Start", tracking=True)
     cds_dashboard_date_end = fields.Date(string="Dashboard Date End", tracking=True)
+    cds_status = fields.Many2one("cds.report.status", string="Status")
     cds_sdic_ids = fields.One2many(
         "spreadsheet.dashboard.ifrs.calculator",
         "spreadsheet_dashboard_id",
@@ -38,13 +65,13 @@ class SpreadsheetDashboard(models.Model):
         "ir.model.fields",
         "Join 4 Journal Item Matching Fields",
         domain="[('model_id.model', '=', 'account.move.line')]",
-        tracking=True
+        tracking=True,
     )
     join5_matching_field_id = fields.Many2one(
         "ir.model.fields",
         "Join 5 Journal Item Matching Fields",
         domain="[('model_id.model', '=', 'account.move.line')]",
-        tracking=True
+        tracking=True,
     )
     join6_matching_field_id = fields.Many2one(
         "ir.model.fields",
@@ -136,7 +163,7 @@ class SpreadsheetDashboard(models.Model):
         python_exec = sys.executable
         cmd = [python_exec, script_path, json_file_path]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1000)
 
         if result.returncode != 0:
             raise Exception(f"Worker failed: {result.stderr}")
@@ -241,7 +268,7 @@ class SpreadsheetDashboard(models.Model):
             # Convert amount formula
             sheet_backup = copy.deepcopy(json_data_text.get("sheets")[0])
             # Backup Data Formula to sheet 3
-            backup_name = "Convert " + sheet_backup.get("name")
+            backup_name = "Convert " + dashboard.cds_status.cds_name or '' + sheet_backup.get("name")
             sheet_backup.update({"name": backup_name})
 
             # convert value without {"content": 'value'} inside cells
@@ -261,6 +288,8 @@ class SpreadsheetDashboard(models.Model):
             cells_backup.update(cells_converted)
             json_data_text.get("sheets").append(sheet_backup)
 
+            check_domain = next(iter(json_data_text.get("lists")), None)
+            json_data_text["lists"]["1"] = json_data_text.get("lists").pop(check_domain)
             domain = json_data_text["lists"]["1"]["domain"]
             json_data_text.get("sheets")[1].update({"cells": cells_text})
             json_data_text["lists"]["1"].update({"domain": domain})
@@ -288,9 +317,7 @@ class SpreadsheetDashboardIFRSCalculator(models.Model):
     reportline = fields.Char("Report Line")
     column = fields.Char("Column")
     balance = fields.Monetary(
-        string="Balance",
-        currency_field="currency_id",
-        readonly=True
+        string="Balance", currency_field="currency_id", readonly=True
     )
     negative_bool = fields.Boolean("Negative")
     currency_id = fields.Many2one(
@@ -345,6 +372,8 @@ class SpreadsheetDashboardIFRSCalculator(models.Model):
     def generate_balance(self):
         for line in self:
             domain = [
+                ("parent_state", "=", "posted"),
+                ("move_id.cds_status", "=", line.spreadsheet_dashboard_id.cds_status.id),
                 ("account_id", "=", line.account_code.id),
                 ("date", ">=", line.spreadsheet_dashboard_id.cds_dashboard_date),
                 ("date", "<=", line.spreadsheet_dashboard_id.cds_dashboard_date_end),

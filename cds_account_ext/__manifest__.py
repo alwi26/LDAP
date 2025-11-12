@@ -21,6 +21,7 @@
         "views/spreadsheet_dashboard.xml",
         "views/res_config_views.xml",
         "views/res_currency_views.xml",
+        "views/report_status_views.xml",
         "wizards/recycle_journal.xml",
     ],
     "assets": {
