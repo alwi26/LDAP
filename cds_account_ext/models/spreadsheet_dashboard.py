@@ -10,32 +10,6 @@ import copy
 import gc
 import os
 import sys
-import calendar
-
-
-class SpreadsheetDashboardGroup(models.Model):
-    _inherit = "spreadsheet.dashboard.group"
-
-    period_type = fields.Selection(
-        [
-            ('month', 'Month'),
-            ('quarter', 'Quarter'),
-            ('year', 'Year'),
-        ],
-        string='Default Period Type',
-    )
-    cds_dashboard_date = fields.Date(string="Dashboard Date Start", tracking=True)
-    cds_dashboard_date_end = fields.Date(string="Dashboard Date End", tracking=True)
-
-    def update_dashboard_date(self):
-        for group in self:
-            if group.cds_dashboard_date and group.cds_dashboard_date_end:
-                group.dashboard_ids.write(
-                    {
-                        "cds_dashboard_date": group.cds_dashboard_date,
-                        "cds_dashboard_date_end": group.cds_dashboard_date_end,
-                    }
-                )
 
 
 class SpreadsheetDashboard(models.Model):
@@ -47,7 +21,6 @@ class SpreadsheetDashboard(models.Model):
     cds_json_converted = fields.Char(string="JSON Converted", copy=False)
     cds_dashboard_date = fields.Date(string="Dashboard Date Start", tracking=True)
     cds_dashboard_date_end = fields.Date(string="Dashboard Date End", tracking=True)
-    cds_status = fields.Many2one("cds.report.status", string="Status")
     cds_sdic_ids = fields.One2many(
         "spreadsheet.dashboard.ifrs.calculator",
         "spreadsheet_dashboard_id",
@@ -268,7 +241,7 @@ class SpreadsheetDashboard(models.Model):
             # Convert amount formula
             sheet_backup = copy.deepcopy(json_data_text.get("sheets")[0])
             # Backup Data Formula to sheet 3
-            backup_name = "Convert " + dashboard.cds_status.cds_name or '' + sheet_backup.get("name")
+            backup_name = "Convert " + sheet_backup.get("name")
             sheet_backup.update({"name": backup_name})
 
             # convert value without {"content": 'value'} inside cells
@@ -317,7 +290,9 @@ class SpreadsheetDashboardIFRSCalculator(models.Model):
     reportline = fields.Char("Report Line")
     column = fields.Char("Column")
     balance = fields.Monetary(
-        string="Balance", currency_field="currency_id", readonly=True
+        string="Balance",
+        currency_field="currency_id",
+        readonly=True
     )
     negative_bool = fields.Boolean("Negative")
     currency_id = fields.Many2one(
@@ -373,7 +348,6 @@ class SpreadsheetDashboardIFRSCalculator(models.Model):
         for line in self:
             domain = [
                 ("parent_state", "=", "posted"),
-                ("move_id.cds_status", "=", line.spreadsheet_dashboard_id.cds_status.id),
                 ("account_id", "=", line.account_code.id),
                 ("date", ">=", line.spreadsheet_dashboard_id.cds_dashboard_date),
                 ("date", "<=", line.spreadsheet_dashboard_id.cds_dashboard_date_end),

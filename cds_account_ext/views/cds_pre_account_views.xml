@@ -59,7 +59,6 @@
                     <field name="cds_generate_done" optional="hide"/>
                     <field name="cds_package_name" optional="hide"/>
                     <field name="cds_input_name" optional="hide"/>
-                    <field name="cds_status" optional="hide"/>
                 </list>
             </field>
         </record>

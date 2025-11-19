@@ -108,7 +108,6 @@ class CdsPreAccountMoveLine(models.Model):
     cds_generate_done = fields.Boolean()
     pre_journal_items_bkey = fields.Char(string="Data Warehouse IFRS ID")
     cds_input_name = fields.Char("Input Name")
-    cds_status = fields.Many2one("cds.report.status", string="Status")
 
     @api.depends("cds_transaction_currency", "cds_amount_in_transaction_currency")
     def _compute_convert_transaction_currency(self):
@@ -182,20 +181,18 @@ class CdsPreAccountMoveLine(models.Model):
         pre_lines_by_group = {}
         for line in pre_lines:
             month_key = line.cds_date.strftime("%Y-%m")
-            group_key = (line.cds_package_name, line.cds_status.id, month_key)
+            group_key = (line.cds_package_name, month_key)
             pre_lines_by_group.setdefault(group_key, []).append(line)
 
         created_moves = self.env["account.move"]
 
-        for (category, status, date), lines in pre_lines_by_group.items():
+        for (category, date), lines in pre_lines_by_group.items():
             move_date = f"{date}-01"
-            status_report = self.env['cds.report.status'].browse(status) or ''
             move = self.env["account.move"].create(
                 {
                     "journal_id": journal.id,
                     "date": move_date,
-                    "ref": f"Auto Journal {category or ''} | {status_report.cds_name or ''} - {move_date}",
-                    "cds_status": status,
+                    "ref": f"Auto Journal {category or ''} - {move_date}",
                 }
             )
 
@@ -245,10 +242,10 @@ class CdsPreAccountMoveLine(models.Model):
                 )
 
                 pre_line.write({"cds_generate_done": True})
-            # total_debit = sum(line_val[2].get('debit', 0.0) for line_val in move_lines_vals)
-            # total_credit = sum(line_val[2].get('credit', 0.0) for line_val in move_lines_vals)
-            # # diff = round(total_debit - abs(total_credit), 2)
-            # diff = round(total_debit - total_credit, 2)
+            total_debit = sum(line_val[2].get('debit', 0.0) for line_val in move_lines_vals)
+            total_credit = sum(line_val[2].get('credit', 0.0) for line_val in move_lines_vals)
+            # diff = round(total_debit - abs(total_credit), 2)
+            diff = round(total_debit - total_credit, 2)
 
             # if diff != 0:
             #     _logger.warning(f"Balancing diff detected (before write): {diff}")
@@ -261,9 +258,10 @@ class CdsPreAccountMoveLine(models.Model):
             #         })
             #     )
             
-            # # Tulis semua line termasuk balancing line ke move
+            # Tulis semua line termasuk balancing line ke move
             move.write({"line_ids": move_lines_vals})
             created_moves |= move
+        created_moves.action_post()
         return True
 
     def _shift_year_safe(self, d, years_back=1):
@@ -318,9 +316,8 @@ class CdsPreAccountMoveLine(models.Model):
         if groups_to_unlink:
             groups_to_unlink.unlink()
 
-    def next_date_range(self, start_date, end_date, period_type=False):
-        if not period_type:
-            period_type = self.env.company.period_type or "month"
+    def next_date_range(self, start_date, end_date):
+        period_type = self.env.company.period_type or "month"
 
         if period_type == "month":
             next_start = (end_date + relativedelta(months=1)).replace(day=1)
@@ -368,123 +365,103 @@ class CdsPreAccountMoveLine(models.Model):
         return headers
 
     def _recycle_dashboard_json(self):
-        base_group = self.env["spreadsheet.dashboard.group"].search(
-            [("name", "ilike", "Template")],
+        dashboard_group_template = self.env["spreadsheet.dashboard.group"].search(
+            [("create_date", "<=", fields.Date.today()), ("name", "ilike", "Template")],
             order="create_date desc",
             limit=1,
         )
+        dashboard_group_ifrs = self.env["spreadsheet.dashboard.group"].search(
+            [("create_date", "<=", fields.Date.today()), ("name", "ilike", "IFRS")],
+            order="create_date desc",
+            limit=1,
+        )
+        if dashboard_group_ifrs:
+            dashboard_group = dashboard_group_ifrs
+        else:
+            dashboard_group = dashboard_group_template
 
-        if not base_group:
-            raise UserError(_("No dashboard template found!"))
+        if not dashboard_group:
+            return
 
-        dashboard = base_group.dashboard_ids and base_group.dashboard_ids[0]
-        start, end = self.next_date_range(dashboard.cds_dashboard_date, dashboard.cds_dashboard_date_end, base_group.period_type)
+        dashboard = dashboard_group.dashboard_ids and dashboard_group.dashboard_ids[0]
+        start, end = self.next_date_range(dashboard.cds_dashboard_date, dashboard.cds_dashboard_date_end)
 
-        s_str = start.strftime("%#d %B %Y")
-        e_str = end.strftime("%#d %B %Y")
+        s_str = start.strftime("%d %B %Y")
+        e_str = end.strftime("%d %B %Y")
+        dashboard_name = f"IFRS ({s_str} - {e_str})"
+        # existing_dashboard_group = self.env["spreadsheet.dashboard.group"].search(
+        #     [("name", "=", dashboard_name)], limit=1
+        # )
         if end > fields.Date.today():
             raise UserError(_(f"Cannot Generate Dashboard in date range {s_str} - {e_str}"))
 
-        account_moves = self.env["account.move"].search([
-            ("cds_status_generate_dashboard", "=", False),
-            ("cds_status", "!=", False),
-            ("date", ">=", start),
-            ("date", "<=", end),
-        ])
+        new_group = dashboard_group.copy(default={"name": dashboard_name})
+        for dashboard in dashboard_group.dashboard_ids:
+            dashboard.copy(
+                default={
+                    "dashboard_group_id": new_group.id,
+                    "name": dashboard.name,
+                    "spreadsheet_binary_data": dashboard.spreadsheet_binary_data,
+                }
+            )
 
-        print(account_moves, "hkjkhkk", start, end)
-
-        statuses = account_moves.mapped("cds_status")
-
-        for status in statuses:
-            _logger.info(f"🔄 PROCESS: {status.cds_name}")
-
-            dashboard_name = f"IFRS ({s_str} - {e_str}) - {status.cds_name}"
-
-            new_group = base_group.copy(default={
-                "name": dashboard_name,
-                "cds_dashboard_date": start,
-                "cds_dashboard_date_end": end,
+        for new_dashboard in new_group.dashboard_ids:
+            # all dashboard should has same date
+            new_dashboard.write({
+                'cds_dashboard_date': start,
+                'cds_dashboard_date_end': end,
             })
+            new_dashboard.generate_all_balance()
+            all_lines = new_dashboard.cds_sdic_ids
 
-            for dashboard in base_group.dashboard_ids:
-                # ============================================================
-                # 3. VALIDASI DUPLICATE (CEGAH GANDA)
-                # ============================================================
-                existing_dashboard = self.env["spreadsheet.dashboard"].search([
-                    ("cds_dashboard_date", "=", start),
-                    ("cds_dashboard_date_end", "=", end),
-                    ("cds_status", "=", status.id),
-                    ("name", "=", dashboard.name),
-                    ("dashboard_group_id.name", "ilike", "IFRS"),
-                ], limit=1)
+            binary_data = new_dashboard.spreadsheet_binary_data
+            if not binary_data:
+                continue
 
-                if existing_dashboard:
-                    _logger.info(f"⚠️ SKIPPED — Dashboard already exists: {dashboard.name}")
+            decoded_bytes = base64.b64decode(binary_data)
+            json_data = json.loads(decoded_bytes.decode("utf-8"))
+
+            # headers = json_data["lists"]["1"]["columns"]
+
+            sheets = json_data.get("sheets")[1]
+            cells = sheets.get("cells", {})
+
+            headers = self.get_header(cells)
+
+            # clear cell value
+            cells.clear()
+            # rewrite the cells
+            for i, field in enumerate(headers):
+                field_obj = self.env[
+                    "spreadsheet.dashboard.ifrs.calculator"
+                ]._fields.get(field)
+                if not field_obj:
                     continue
 
-                dashboard.copy(
-                    default={
-                        "dashboard_group_id": new_group.id,
-                        "name": dashboard.name,
-                        "spreadsheet_binary_data": dashboard.spreadsheet_binary_data,
+                letter = string.ascii_uppercase[i]
+                no = 1
+
+                # Keep Odoo format
+                cells[f"{letter}{no}"] = {"content": f'=ODOO.LIST.HEADER(1,"{field}")'}
+
+                for ifrs in all_lines:
+                    no += 1
+                    cells[f"{letter}{no}"] = {
+                        "content": f'=ODOO.LIST(1,{no-1},"{field}")'
                     }
-                )
 
-            # ============================================================
-            # 5. Update dashboard baru (inject data IFRS + balance calc)
-            # ============================================================
-            for new_dashboard in new_group.dashboard_ids:
+            json_data.get("sheets")[1].update({"cells": cells})
 
-                new_dashboard.write({
-                    "cds_status": status.id,
-                    "cds_dashboard_date": start,
-                    "cds_dashboard_date_end": end,
-                })
+            check_domain = next(iter(json_data.get("lists")), None)
+            json_data["lists"]["1"] = json_data.get("lists").pop(check_domain)
+            domain = json_data["lists"]["1"]["domain"]
+            domain = [("id", "in", all_lines.ids)]
+            json_data["lists"]["1"].update({"domain": domain})
+            json_data["lists"]["1"].update({"model": "spreadsheet.dashboard.ifrs.calculator"})
 
-                new_dashboard.generate_all_balance()
+            # encode back to base64
+            updated_json_str = json.dumps(json_data)
+            updated_binary = base64.b64encode(updated_json_str.encode("utf-8"))
 
-                all_lines = new_dashboard.cds_sdic_ids
-                binary_data = new_dashboard.spreadsheet_binary_data
-                if not binary_data:
-                    continue
-
-                decoded_bytes = base64.b64decode(binary_data)
-                json_data = json.loads(decoded_bytes.decode("utf-8"))
-
-                sheets = json_data.get("sheets")[1]
-                cells = sheets.get("cells", {})
-                headers = self.get_header(cells)
-                cells.clear()
-
-                for i, field in enumerate(headers):
-                    letter = string.ascii_uppercase[i]
-                    cells[f"{letter}1"] = {"content": f'=ODOO.LIST.HEADER(1,"{field}")'}
-
-                    for row_idx, ifrs in enumerate(all_lines, start=2):
-                        cells[f"{letter}{row_idx}"] = {
-                            "content": f'=ODOO.LIST(1,{row_idx-1},"{field}")'
-                        }
-
-                json_data["sheets"][1]["cells"] = cells
-                check_domain = next(iter(json_data.get("lists")), None)
-                json_data["lists"]["1"] = json_data.get("lists").pop(check_domain)
-                json_data["lists"]["1"].update({
-                    "domain": [("id", "in", all_lines.ids)],
-                    "model": "spreadsheet.dashboard.ifrs.calculator",
-                })
-
-                new_dashboard.spreadsheet_binary_data = base64.b64encode(
-                    json.dumps(json_data).encode("utf-8")
-                )
-
-            account_moves.write({'cds_status_generate_dashboard': True})
-
-            _logger.info(f"✅ DASHBOARD GENERATED: {dashboard_name}")
-
-        # Update Dashboard template date
-        base_group.write({
-            "cds_dashboard_date": start,
-            "cds_dashboard_date_end": end,
-        })
-        base_group.update_dashboard_date()
+            new_dashboard.spreadsheet_binary_data = updated_binary
+        self._unlink_dashboard_last_year(new_group.dashboard_ids)
