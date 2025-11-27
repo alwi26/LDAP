@@ -244,20 +244,21 @@ class CdsPreAccountMoveLine(models.Model):
                 pre_line.write({"cds_generate_done": True})
             total_debit = sum(line_val[2].get('debit', 0.0) for line_val in move_lines_vals)
             total_credit = sum(line_val[2].get('credit', 0.0) for line_val in move_lines_vals)
-            # diff = round(total_debit - abs(total_credit), 2)
             diff = round(total_debit - total_credit, 2)
-
-            # if diff != 0:
-            #     _logger.warning(f"Balancing diff detected (before write): {diff}")
-            #     move_lines_vals.append(
-            #         (0, 0, {
-            #             "name": "Auto Balancing",
-            #             "account_id": 811,
-            #             "debit": 0.0 if diff > 0 else abs(diff),
-            #             "credit": diff if diff > 0 else 0.0,
-            #         })
-            #     )
             
+            if diff != 0 and abs(diff) <= self.env.company.maximum_unbalance:
+                _logger.warning(f"Balancing diff detected (before write): {diff}")
+                move_lines_vals.append(
+                    (0, 0, {
+                        "name": "Auto Balancing ",
+                        "account_id": 811,
+                        "debit": 0.0 if diff > 0 else abs(diff),
+                        "credit": diff if diff > 0 else 0.0,
+                    })
+                )
+            elif diff != 0 and abs(diff) > self.env.company.maximum_unbalance:
+                raise UserError("Amount exceeds maximum unbalance limit.")
+
             # Tulis semua line termasuk balancing line ke move
             move.write({"line_ids": move_lines_vals})
             created_moves |= move
