@@ -12,6 +12,8 @@ from datetime import datetime, timedelta, date
 from openpyxl import Workbook
 from xlcalculator import ModelCompiler, Evaluator, xltypes
 
+from odoo.tools.float_utils import float_compare, float_round
+
 _logger = logging.getLogger(__name__)
 
 
@@ -45,10 +47,10 @@ class CdsPreAccountMoveLine(models.Model):
         [("cr", "CR"), ("dr", "DR")], string="Debit/Credit"
     )
     cds_debit = fields.Float(
-        string="Debit", compute="_compute_debit_credit", store=True
+        string="Debit", compute="_compute_debit_credit", store=True, digits='Product Price'
     )
     cds_credit = fields.Float(
-        string="Credit", compute="_compute_debit_credit", store=True
+        string="Credit", compute="_compute_debit_credit", store=True, digits='Product Price'
     )
     cds_amount_in_currency_conversion = fields.Float(
         string="Amount in Currency Conversion",
@@ -244,9 +246,11 @@ class CdsPreAccountMoveLine(models.Model):
                 pre_line.write({"cds_generate_done": True})
             total_debit = sum(line_val[2].get('debit', 0.0) for line_val in move_lines_vals)
             total_credit = sum(line_val[2].get('credit', 0.0) for line_val in move_lines_vals)
-            diff = round(total_debit - total_credit, 2)
-            
-            if diff != 0 and abs(diff) <= self.env.company.maximum_unbalance:
+            diff = round(total_debit - total_credit, 4)
+            diff_compare = float_compare(total_debit, total_credit, precision_digits=4)
+            if diff_compare != 0:
+                if abs(diff) > self.env.company.maximum_unbalance:
+                    raise UserError("Amount exceeds maximum unbalance limit.")
                 _logger.warning(f"Balancing diff detected (before write): {diff}")
                 move_lines_vals.append(
                     (0, 0, {
@@ -256,8 +260,7 @@ class CdsPreAccountMoveLine(models.Model):
                         "credit": diff if diff > 0 else 0.0,
                     })
                 )
-            elif diff != 0 and abs(diff) > self.env.company.maximum_unbalance:
-                raise UserError("Amount exceeds maximum unbalance limit.")
+                _logger.warning("move_lines_vals", move_lines_vals)
 
             # Tulis semua line termasuk balancing line ke move
             move.write({"line_ids": move_lines_vals})
