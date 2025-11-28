@@ -189,6 +189,8 @@ class CdsPreAccountMoveLine(models.Model):
         created_moves = self.env["account.move"]
 
         for (category, date), lines in pre_lines_by_group.items():
+            total_debit = 0
+            total_credit = 0
             move_date = f"{date}-01"
             move = self.env["account.move"].create(
                 {
@@ -234,19 +236,19 @@ class CdsPreAccountMoveLine(models.Model):
                         {
                             "name": pre_line.cds_run_description,
                             "account_id": account.id,
-                            "debit": pre_line.cds_debit,
-                            # "credit": abs(pre_line.cds_credit),
-                            "credit": pre_line.cds_credit,
+                            "debit": round(pre_line.cds_debit,0),
+                            "credit": round(pre_line.cds_credit,0),
                             "analytic_distribution": analytic_distribution,
                             "cds_pre_account_id": pre_line.id,
                         },
                     )
                 )
+                total_debit += round(pre_line.cds_debit,0)
+                total_credit += round(pre_line.cds_credit,0)
 
                 pre_line.write({"cds_generate_done": True})
-            total_debit = sum(line_val[2].get('debit', 0.0) for line_val in move_lines_vals)
-            total_credit = sum(line_val[2].get('credit', 0.0) for line_val in move_lines_vals)
-            diff = round(total_debit - total_credit, 4)
+
+            diff = total_debit - total_credit
             diff_compare = float_compare(total_debit, total_credit, precision_digits=4)
             if diff_compare != 0:
                 if abs(diff) > self.env.company.maximum_unbalance:
