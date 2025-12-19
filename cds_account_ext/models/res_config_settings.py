@@ -14,8 +14,3 @@ class ResConfigSettings(models.TransientModel):
         related='company_id.period_type',
         readonly=False,
     )
-    maximum_unbalance = fields.Float(
-        string="Maximum Unbalance",
-        related='company_id.maximum_unbalance',
-        readonly=False,
-    )

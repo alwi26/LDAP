@@ -26,6 +26,31 @@
         </field>
     </record>
 
+    <record id="spreadsheet_dashboard_group_inherit_view_form" model="ir.ui.view">
+        <field name="name">spreadsheet.dashboard.group.form.view</field>
+        <field name="model">spreadsheet.dashboard.group</field>
+        <field name="inherit_id" ref="spreadsheet_dashboard.spreadsheet_dashboard_container_view_form"/>
+        <field name="arch" type="xml">
+            <data>
+                <xpath expr="//sheet" position="before">
+                    <header>
+                        <button name="calculate" type="object" string="Calculate" class="btn-primary"/>
+                    </header>
+                </xpath>
+                <xpath expr="//form/sheet/div" position="after">
+                    <group>
+                        <group>
+                            <field name="cds_status"/>
+                            <field name="period_type"/>
+                            <field name="cds_dashboard_date"/>
+                            <field name="cds_dashboard_date_end"/>
+                        </group>
+                    </group>
+                </xpath>
+            </data>
+        </field>
+    </record>
+
     <record id="spreadsheet_dashboard_inherit_view_form" model="ir.ui.view">
         <field name="name">spreadsheet.dashboard.inherit.form.view</field>
         <field name="model">spreadsheet.dashboard</field>
@@ -38,6 +63,7 @@
                         <group>
                             <field name="name"/>
                             <field name="dashboard_group_id"/>
+                            <field name="cds_status"/>
                             <field name="spreadsheet_binary_data" groups="base.group_no_one" widget="binary_spreadsheet" filename="spreadsheet_file_name" string="Data"/>
                             <field name="spreadsheet_file_name" invisible="1"/>
                             <field name="thumbnail"/>

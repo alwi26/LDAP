@@ -11,11 +11,6 @@
                         <field name="period_type"/>
                     </setting>
                 </block>
-                <block title="Unbalance Amount" name="unbalance_amount">
-                    <setting id="maximum_unbalance">
-                        <field name="maximum_unbalance"/>
-                    </setting>
-                </block>
             </xpath>
         </field>
     </record>

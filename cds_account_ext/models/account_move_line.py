@@ -2,6 +2,12 @@ from odoo import models, fields, api
 import logging
 _logger = logging.getLogger(__name__)
 
+class AccountMove(models.Model):
+    _inherit = "account.move"
+
+    cds_status = fields.Many2one('cds.report.status', string="Status")
+    cds_status_generate_dashboard = fields.Boolean()
+
 class AccountMoveLine(models.Model):
     _inherit = "account.move.line"
 

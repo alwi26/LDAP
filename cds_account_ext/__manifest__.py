@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Accounting Extension",
-    "version": "18.0.0.0.3",
+    "version": "18.0.0.0.4",
     "license": "OPL-1",
     "summary": "Accounting Extension",
     "category": "Accounting",
@@ -21,6 +21,7 @@
         "views/spreadsheet_dashboard.xml",
         "views/res_config_views.xml",
         "views/res_currency_views.xml",
+        "views/report_status_views.xml",
         "wizards/recycle_journal.xml",
     ],
     "assets": {

@@ -5,6 +5,7 @@
         <field name="arch" type="xml">
             <form string="Recycle Journal Records">
                 <group>
+                    <field name="cds_status"/>
                     <field name="date_from"/>
                     <field name="date_to"/>
                 </group>

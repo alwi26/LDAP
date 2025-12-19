@@ -8,6 +8,7 @@ class WizardRecycleJournal(models.TransientModel):
 
     date_from = fields.Date(required=True)
     date_to = fields.Date(required=True)
+    cds_status = fields.Many2one("cds.report.status", string="Status")
 
     def action_delete(self):
         if self.date_from > self.date_to:
@@ -15,6 +16,7 @@ class WizardRecycleJournal(models.TransientModel):
 
         pre_journals = self.env["cds_pre_account.move.line"].search(
             [
+                ("cds_status", "=", self.cds_status.id),
                 ("cds_date", ">=", self.date_from),
                 ("cds_date", "<=", self.date_to),
             ]
@@ -22,6 +24,7 @@ class WizardRecycleJournal(models.TransientModel):
         pre_journals.unlink()
         moves = self.env["account.move"].search(
             [
+                ("cds_status", "=", self.cds_status.id),
                 ("date", ">=", self.date_from),
                 ("date", "<=", self.date_to),
             ]
@@ -30,5 +33,4 @@ class WizardRecycleJournal(models.TransientModel):
             move.button_draft()
 
         moves.unlink()
-        
         return {"type": "ir.actions.act_window_close"}
