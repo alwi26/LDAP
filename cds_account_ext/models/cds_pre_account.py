@@ -245,9 +245,8 @@ class CdsPreAccountMoveLine(models.Model):
                         {
                             "name": pre_line.cds_run_description,
                             "account_id": account.id,
-                            "debit": pre_line.cds_debit,
-                            # "credit": abs(pre_line.cds_credit),
-                            "credit": pre_line.cds_credit,
+                            "debit": round(pre_line.cds_debit,0),
+                            "credit": round(pre_line.cds_credit,0),
                             "analytic_distribution": analytic_distribution,
                             "cds_pre_account_id": pre_line.id,
                         },
@@ -255,23 +254,23 @@ class CdsPreAccountMoveLine(models.Model):
                 )
 
                 pre_line.write({"cds_generate_done": True})
-            # total_debit = sum(line_val[2].get('debit', 0.0) for line_val in move_lines_vals)
-            # total_credit = sum(line_val[2].get('credit', 0.0) for line_val in move_lines_vals)
-            # # diff = round(total_debit - abs(total_credit), 2)
-            # diff = round(total_debit - total_credit, 2)
+            total_debit = sum(line_val[2].get('debit', 0.0) for line_val in move_lines_vals)
+            total_credit = sum(line_val[2].get('credit', 0.0) for line_val in move_lines_vals)
+            # diff = round(total_debit - abs(total_credit), 2)
+            diff = round(total_debit - total_credit, 2)
 
-            # if diff != 0:
-            #     _logger.warning(f"Balancing diff detected (before write): {diff}")
-            #     move_lines_vals.append(
-            #         (0, 0, {
-            #             "name": "Auto Balancing",
-            #             "account_id": 811,
-            #             "debit": 0.0 if diff > 0 else abs(diff),
-            #             "credit": diff if diff > 0 else 0.0,
-            #         })
-            #     )
+            if diff != 0:
+                _logger.warning(f"Balancing diff detected (before write): {diff}")
+                move_lines_vals.append(
+                    (0, 0, {
+                        "name": "Auto Balancing",
+                        "account_id": 811,
+                        "debit": 0.0 if diff > 0 else abs(diff),
+                        "credit": diff if diff > 0 else 0.0,
+                    })
+                )
 
-            # # Tulis semua line termasuk balancing line ke move
+            # Tulis semua line termasuk balancing line ke move
             move.write({"line_ids": move_lines_vals})
             created_moves |= move
         return True
