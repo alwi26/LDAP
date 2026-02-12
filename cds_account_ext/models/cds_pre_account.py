@@ -245,8 +245,8 @@ class CdsPreAccountMoveLine(models.Model):
                         {
                             "name": pre_line.cds_run_description,
                             "account_id": account.id,
-                            "debit": round(pre_line.cds_debit,0),
-                            "credit": round(pre_line.cds_credit,0),
+                            "debit": round(pre_line.cds_debit, 0),
+                            "credit": round(pre_line.cds_credit, 0),
                             "analytic_distribution": analytic_distribution,
                             "cds_pre_account_id": pre_line.id,
                         },
@@ -254,24 +254,32 @@ class CdsPreAccountMoveLine(models.Model):
                 )
 
                 pre_line.write({"cds_generate_done": True})
-            total_debit = sum(line_val[2].get('debit', 0.0) for line_val in move_lines_vals)
-            total_credit = sum(line_val[2].get('credit', 0.0) for line_val in move_lines_vals)
-            # diff = round(total_debit - abs(total_credit), 2)
+            total_debit = sum(
+                line_val[2].get("debit", 0.0) for line_val in move_lines_vals
+            )
+            total_credit = sum(
+                line_val[2].get("credit", 0.0) for line_val in move_lines_vals
+            )
             diff = round(total_debit - total_credit, 2)
 
             if diff != 0:
                 _logger.warning(f"Balancing diff detected (before write): {diff}")
                 move_lines_vals.append(
-                    (0, 0, {
-                        "name": "Auto Balancing",
-                        "account_id": 811,
-                        "debit": 0.0 if diff > 0 else abs(diff),
-                        "credit": diff if diff > 0 else 0.0,
-                    })
+                    (
+                        0,
+                        0,
+                        {
+                            "name": "Auto Balancing",
+                            "account_id": 811,
+                            "debit": 0.0 if diff > 0 else abs(diff),
+                            "credit": diff if diff > 0 else 0.0,
+                        },
+                    )
                 )
 
-            # Tulis semua line termasuk balancing line ke move
+            # # Tulis semua line termasuk balancing line ke move
             move.write({"line_ids": move_lines_vals})
+            move.action_post()
             created_moves |= move
         return True
 
@@ -394,8 +402,8 @@ class CdsPreAccountMoveLine(models.Model):
             base_group.period_type,
         )
 
-        s_str = start.strftime("%#d %B %Y")
-        e_str = end.strftime("%#d %B %Y")
+        s_str = start.strftime("%d %B %Y")
+        e_str = end.strftime("%d %B %Y")
         if end > fields.Date.today():
             raise UserError(
                 _(f"Cannot Generate Dashboard in date range {s_str} - {e_str}")
@@ -420,7 +428,7 @@ class CdsPreAccountMoveLine(models.Model):
                     "name": dashboard_name,
                     "cds_dashboard_date": start,
                     "cds_dashboard_date_end": end,
-                    "dashboard_ids": False
+                    "dashboard_ids": False,
                 }
             )
 
@@ -514,4 +522,4 @@ class CdsPreAccountMoveLine(models.Model):
                     "cds_dashboard_date_end": end,
                 }
             )
-            base_group.update_dashboard_date()
+            base_group.calculate()

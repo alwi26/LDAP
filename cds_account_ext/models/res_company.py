@@ -12,3 +12,6 @@ class ResCompany(models.Model):
         ],
         string='Default Period Type',
     )
+    maximum_unbalance = fields.Float(
+        string="Maximum Unbalance"
+    )

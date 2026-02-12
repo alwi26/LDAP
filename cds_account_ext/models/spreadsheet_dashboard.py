@@ -18,11 +18,11 @@ class SpreadsheetDashboardGroup(models.Model):
 
     period_type = fields.Selection(
         [
-            ('month', 'Month'),
-            ('quarter', 'Quarter'),
-            ('year', 'Year'),
+            ("month", "Month"),
+            ("quarter", "Quarter"),
+            ("year", "Year"),
         ],
-        string='Default Period Type',
+        string="Default Period Type",
     )
     cds_dashboard_date = fields.Date(string="Dashboard Date Start", tracking=True)
     cds_dashboard_date_end = fields.Date(string="Dashboard Date End", tracking=True)
@@ -271,7 +271,10 @@ class SpreadsheetDashboard(models.Model):
             # Convert amount formula
             sheet_backup = copy.deepcopy(json_data_text.get("sheets")[0])
             # Backup Data Formula to sheet 3
-            backup_name = "Convert " + dashboard.cds_status.cds_name or '' + sheet_backup.get("name")
+            backup_name = (
+                "Convert " + dashboard.cds_status.cds_name
+                or "" + sheet_backup.get("name")
+            )
             sheet_backup.update({"name": backup_name})
 
             # convert value without {"content": 'value'} inside cells
@@ -376,7 +379,11 @@ class SpreadsheetDashboardIFRSCalculator(models.Model):
         for line in self:
             domain = [
                 ("parent_state", "=", "posted"),
-                ("move_id.cds_status", "=", line.spreadsheet_dashboard_id.cds_status.id),
+                (
+                    "move_id.cds_status",
+                    "=",
+                    line.spreadsheet_dashboard_id.cds_status.id,
+                ),
                 ("account_id", "=", line.account_code.id),
                 ("date", ">=", line.spreadsheet_dashboard_id.cds_dashboard_date),
                 ("date", "<=", line.spreadsheet_dashboard_id.cds_dashboard_date_end),
