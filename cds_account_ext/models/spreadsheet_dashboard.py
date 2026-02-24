@@ -123,12 +123,10 @@ class SpreadsheetDashboard(models.Model):
         }
 
     def generate_all_balance(self):
+        self = self.sudo()
+
         self.message_post(
-            body=_(
-                f"""
-                Calculated IFRS Calculator
-                """
-            ),
+            body=_("Calculated IFRS Calculator"),
             subtype_xmlid="mail.mt_note",
         )
 

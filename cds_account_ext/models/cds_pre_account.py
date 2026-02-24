@@ -264,13 +264,14 @@ class CdsPreAccountMoveLine(models.Model):
 
             if diff != 0:
                 _logger.warning(f"Balancing diff detected (before write): {diff}")
+                selisih_account = self.env['account.account'].search([('code','=',470407090)])
                 move_lines_vals.append(
                     (
                         0,
                         0,
                         {
                             "name": "Auto Balancing",
-                            "account_id": 811,
+                            "account_id": selisih_account.id,
                             "debit": 0.0 if diff > 0 else abs(diff),
                             "credit": diff if diff > 0 else 0.0,
                         },
