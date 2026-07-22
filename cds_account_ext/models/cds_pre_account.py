@@ -146,7 +146,20 @@ class CdsPreAccountMoveLine(models.Model):
     )
     def _compute_debit_credit(self):
         for rec in self:
-            if (
+            if (rec.cds_movement_of_master_account == "Movement"
+                and rec.cds_input_name == "input_3"
+            ):
+                rec.cds_debit = (
+                    rec.cds_amount_in_currency_conversion
+                    if rec.cds_amount_in_currency_conversion >= 0
+                    else 0.0
+                )
+                rec.cds_credit = (
+                    -1 * rec.cds_amount_in_currency_conversion
+                    if rec.cds_amount_in_currency_conversion < 0
+                    else 0.0
+                )
+            elif (
                 rec.cds_amount_in_currency_conversion < 0
                 and rec.cds_movement_of_master_account == "Movement"
             ):
